@@ -105,9 +105,8 @@ Sanity: 100.0% have CA in 1-200; PA>=CA for 100.0%; heights 151-210 cm
 Run it yourself to see the full attribute dump.
 
 ## Still unknown or to verify
-1. Position-rating order for the fullback and wing-back slots (GK, DM, ML, MC, MR, AML, AMC, AMR and ST are solid).
+1. Position-rating order is now `GK, SW, DL, DC, DR, DM, ML, MC, MR, AML, AMC, AMR, ST, WBL, WBR`, inferred from known centre-backs and full-backs. WBL/WBR still need a screenshot to confirm.
 2. Personality block order (8 bytes at +0x70).
-3. Weight.
 4. Value: the field is tentative.
 5. Meaning of the +0x108 club pointer.
 6. Not decoded yet: known-as names, traits, reputation, playing-time status, and caps/goals.
@@ -118,4 +117,5 @@ dotnet build -c Release
 src\FMScout.Probe\bin\Release\net10.0\FMScout.Probe.exe report Haaland Saka
 ```
 This needs FM27 running with a save loaded. It targets .NET 10 (the SDK installed here) on x64.
+
 

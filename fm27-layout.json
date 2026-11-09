@@ -49,8 +49,9 @@
         "value": "-0x54"             // u32 GBP, tentative: Yamal 221.9M (UI 202-222M), Verbruggen 25.2M (UI 19.5-25M), Haaland exactly 300M (Not for Sale)
       },
 
-      // Tentative order, inferred from known players (Verbruggen=GK, Haaland=ST, Yamal/Saka=AMR, Musiala/Wirtz=AMC).
-      "positionNames": [ "GK", "DL", "DC", "DR", "pos04?", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL?", "WBR?" ],
+      // Order from known players: GK Verbruggen; DC Cubarsi/Huijsen/Yoro (idx3); DL+WBL Andueza; DR+WBR Javier Ortiz; DM/MC/AMC Bellingham; AMR Yamal; ST Haaland.
+      // idx1 is 1 for everyone -> Sweeper (legacy). WBL/WBR still to confirm with a screenshot.
+      "positionNames": [ "GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR" ],
 
       // 54 attributes, raw 1-100 (UI = round(raw/5)). Order = FM's classic internal order.
       // Confirmed against UI for Haaland, Yamal, Verbruggen: all 36 outfield + Handling, CommandOfArea, OneOnOnes, Eccentricity, RushingOut, Punching.
@@ -68,4 +69,5 @@
     }
   }
 }
+
 

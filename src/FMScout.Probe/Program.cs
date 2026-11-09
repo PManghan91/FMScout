@@ -1,6 +1,17 @@
 using FMScout.Probe;
 using FMScout.Reader;
 
+if (args.Length > 0 && args[0] == "poscands")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var ps = g.PlayerPointers().Select(g.ReadPlayer).Where(p => p.CurrentAbility >= 140).ToList();
+    foreach (var p in ps.Where(p => p.Positions[4] >= 10 || p.Positions[13] >= 15 || p.Positions[14] >= 15 || p.Positions[1] >= 15 || p.Positions[3] >= 15)
+                        .OrderByDescending(p => p.CurrentAbility).Take(25))
+        Console.WriteLine($"{p.Name,-30} CA {p.CurrentAbility} {p.Club,-25} pos " + string.Join(" ", p.Positions));
+    var gk = ps.Where(p => p.Positions[0] == 20).OrderByDescending(p => p.CurrentAbility).Take(5);
+    foreach (var p in gk) Console.WriteLine($"GK {p.Name,-28} CA {p.CurrentAbility} {p.Club} AR {p.Attributes[12]} Com {p.Attributes[14]} Ref {p.Attributes[21]} Kick {p.Attributes[15]} Thr {p.Attributes[16]}");
+    return;
+}
 if (args.Length == 0 || args[0] == "report")
 {
     Report.Run(args.Length > 1 ? args[1..] : ["Haaland", "Bellingham", "Lamine Yamal", "Saka", "Verbruggen"]);
@@ -130,6 +141,7 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
 
 
 
