@@ -48,6 +48,15 @@ public sealed class PlayerRow
     public double Gain { get; set; }
     public string GainText { get; set; } = "";
     public string TeamName { get; set; } = "";
+    public string PersonalityLabel { get; set; } = "";
+    public int CareerApps => Source.CareerApps;
+    public int CareerGoals => Source.CareerGoals;
+    public double GoalsPerGame => CareerApps > 0 ? CareerGoals / (double)CareerApps : 0;
+    public double Outlook { get; set; }
+    public string OutlookText => global::FM27Scout.Model.Personality.OutlookText(Outlook);
+    public int Ambition => Source.Personality.Length > 1 ? Source.Personality[global::FM27Scout.Model.Personality.Ambition] : 0;
+    public int Loyalty => Source.Personality.Length > 2 ? Source.Personality[global::FM27Scout.Model.Personality.Loyalty] : 0;
+    public int Professionalism => Source.Personality.Length > 4 ? Source.Personality[global::FM27Scout.Model.Personality.Professionalism] : 0;
     public string WageText => Wage > 0 ? MoneyText.Format(Wage) : "-";
     public string ValueText => Value > 0 ? MoneyText.Format(Value) : "-";
 
@@ -107,6 +116,9 @@ public static class Attr
     public static readonly string[] Goalkeeping = ["AerialReach", "CommandOfArea", "Communication", "Eccentricity", "FirstTouch", "Handling", "Kicking", "OneOnOnes", "Passing", "Punching", "Reflexes", "RushingOut", "Throwing"];
     public static readonly string[] Hidden = ["Consistency", "Dirtiness", "ImportantMatches", "InjuryProneness", "Versatility"];
 }
+
+
+
 
 
 

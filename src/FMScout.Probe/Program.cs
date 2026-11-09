@@ -12,6 +12,82 @@ if (args.Length > 0 && args[0] == "poscands")
     foreach (var p in gk) Console.WriteLine($"GK {p.Name,-28} CA {p.CurrentAbility} {p.Club} AR {p.Attributes[12]} Com {p.Attributes[14]} Ref {p.Attributes[21]} Kick {p.Attributes[15]} Thr {p.Attributes[16]}");
     return;
 }
+if (args.Length > 0 && args[0] == "patchtest")
+{
+    var layouts = LayoutFile.Load(Report.FindLayout());
+    var good = layouts["27.0.0+2493426"];
+    var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    var bad = System.Text.Json.JsonSerializer.Deserialize<BuildLayout>(System.Text.Json.JsonSerializer.Serialize(good, opts), opts)!;
+    // simulate a patch: statics moved +0x1000, vtables +0x40, player block +0x10
+    bad.PersonDb.RootRva = new Hex(good.PersonDb.RootRva + 0x1000); bad.GameDateRva = new Hex(good.GameDateRva + 0x1000);
+    bad.PlayerVtableRva = new Hex(good.PlayerVtableRva + 0x40); bad.StaffVtableRva = new Hex(good.StaffVtableRva + 0x40); bad.HumanManagerVtableRva = new Hex(good.HumanManagerVtableRva + 0x40);
+    foreach (var pc in bad.ExtraPlayerClasses) pc.VtableRva = new Hex(pc.VtableRva + 0x40);
+    foreach (var pr in typeof(PlayerLayout).GetProperties().Where(x => x.PropertyType == typeof(Hex) && x.Name is not ("CareerGoals" or "CareerApps")))
+    { var h = (Hex)pr.GetValue(bad.Player)!; if (h.Value != 0) pr.SetValue(bad.Player, new Hex(h.Value + 0x10)); }
+    using var m3 = ProcessMemory.Attach("fm");
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var r = PatchDoctor.Run(m3, bad, "test-build", new Progress<string>(Console.WriteLine));
+    Console.WriteLine($"ok={r.Ok} in {sw.Elapsed.TotalSeconds:F0}s");
+    if (r.Layout != null)
+    {
+        void Cmp(string n, long a, long b) => Console.WriteLine($"  {n,-22} found {a:X} expected {b:X} {(a == b ? "OK" : "MISMATCH")}");
+        Cmp("rootRva", r.Layout.PersonDb.RootRva, good.PersonDb.RootRva); Cmp("vectorBegin", r.Layout.PersonDb.VectorBegin, good.PersonDb.VectorBegin);
+        Cmp("playerVtable", r.Layout.PlayerVtableRva, good.PlayerVtableRva); Cmp("staffVtable", r.Layout.StaffVtableRva, good.StaffVtableRva);
+        Cmp("humanVtable", r.Layout.HumanManagerVtableRva, good.HumanManagerVtableRva); Cmp("gameDate", r.Layout.GameDateRva, good.GameDateRva);
+        Cmp("player.positions", r.Layout.Player.Positions, good.Player.Positions); Cmp("player.CA", r.Layout.Player.CurrentAbility, good.Player.CurrentAbility);
+        Cmp("player.careerStats", r.Layout.Player.CareerStats, good.Player.CareerStats);
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "statscross")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    ulong h = 0x227E07609C8, y = 0x227E57990D8; // Haaland, Yamal
+    // ranges (UI at 4/2/2037, game moved on ~4 weeks): [haaLo, haaHi, yamLo, yamHi]
+    var targets = new (string n, int a, int b, int c, int d)[] { ("career apps", 583, 600, 441, 456), ("career goals", 364, 376, 212, 224), ("season apps", 24, 34, 27, 36), ("season goals", 5, 10, 13, 19) };
+    IEnumerable<(string label, ulong addr)> Sources(ulong v)
+    {
+        yield return ("block", v - 0x288);
+        for (int s = 0; s < 0x3C8; s += 8)
+        {
+            ulong p1 = m2.ReadPtr(v - 0x288 + (ulong)s);
+            if (p1 < 0x10000000000 || p1 > 0x7FF000000000) continue;
+            yield return ($"[blk+0x{s:X}]", p1);
+            for (int t = 0; t < 0x100; t += 8) { ulong p2 = m2.ReadPtr(p1 + (ulong)t); if (p2 > 0x10000000000 && p2 < 0x7FF000000000) yield return ($"[[blk+0x{s:X}]+0x{t:X}]", p2); }
+        }
+    }
+    var hs = Sources(h).ToList(); var ys = Sources(y).ToDictionary(x => x.label, x => x.addr);
+    foreach (var (label, ha) in hs)
+    {
+        if (!ys.TryGetValue(label, out var ya)) continue;
+        var hb = m2.ReadBytes(ha, 0x400); var yb = m2.ReadBytes(ya, 0x400); if (hb == null || yb == null) continue;
+        foreach (var t in targets)
+            for (int i = 0; i + 2 <= 0x400; i += 2)
+            {
+                int hv = BitConverter.ToUInt16(hb, i), yv = BitConverter.ToUInt16(yb, i);
+                if (hv >= t.a && hv <= t.b && yv >= t.c && yv <= t.d) Console.WriteLine($"{t.n}: {label}+0x{i:X} haaland {hv} yamal {yv}");
+            }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "statsfind")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; ulong v = Explore.Hex(args[1]);
+    var refs = m2.ScanPointersToAny(new HashSet<ulong> { v }, privateOnly: true, max: 5000);
+    Console.WriteLine($"{refs.Count} refs");
+    foreach (var (at, _) in refs)
+    {
+        var b = m2.ReadBytes(at - 0x80, 0x180); if (b == null) continue;
+        var floats = new List<string>();
+        for (int i = 0; i + 4 <= b.Length; i += 4) { float f = BitConverter.ToSingle(b, i); if (f > 5.5f && f < 8.5f) floats.Add($"{i - 0x80:+#;-#;0}:{f:0.00}"); }
+        var u16s = new List<string>();
+        for (int i = 0; i + 2 <= b.Length; i += 2) { ushort u = BitConverter.ToUInt16(b, i); if (u is >= 580 and <= 600 || u is >= 360 and <= 375) u16s.Add($"{i - 0x80:+#;-#;0}:{u}"); }
+        if (floats.Count >= 2 || u16s.Count >= 2) Console.WriteLine($"ref @0x{at:X}: floats[{string.Join(" ", floats.Take(8))}] u16[{string.Join(" ", u16s.Take(8))}]");
+    }
+    return;
+}
 if (args.Length > 0 && args[0] == "staffsolve") { using var g = FmGame.Attach(Report.FindLayout()); StaffSolve.Run(g); return; }
 if (args.Length > 0 && args[0] == "staffpick")
 {
@@ -371,6 +447,9 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
+
 
 
 

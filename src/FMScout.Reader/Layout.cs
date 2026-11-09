@@ -16,6 +16,8 @@ public sealed class BuildLayout
     public PlayerClass[] ExtraPlayerClasses { get; set; } = [];
     public Hex HumanManagerVtableRva { get; set; }
     public Dictionary<string, string> SquadStatusNames { get; set; } = new();
+    public Hex StaffVtableRva { get; set; }
+    public Dictionary<string, string> JobNames { get; set; } = new();
     public PersonLayout Person { get; set; } = new();
     public NationLayout Nation { get; set; } = new();
     public ClubLayout Club { get; set; } = new();
@@ -47,7 +49,7 @@ public sealed class PersonLayout
     public int FemaleBit { get; set; }
 }
 
-public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } public Hex SquadStatus { get; set; } }
+public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } public Hex SquadStatus { get; set; } public Hex Job { get; set; } }
 public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } }
 
 public sealed class NationLayout { public Hex Name { get; set; } public Hex Code { get; set; } public Hex Nationality { get; set; } }
@@ -64,6 +66,9 @@ public sealed class PlayerLayout
     public Hex PotentialAbility { get; set; }
     public Hex Value { get; set; }
     public Hex CommonName { get; set; }
+    public Hex CareerStats { get; set; }
+    public Hex CareerGoals { get; set; }
+    public Hex CareerApps { get; set; }
     public Hex HomeReputation { get; set; }
     public Hex CurrentReputation { get; set; }
     public Hex WorldReputation { get; set; }
@@ -105,6 +110,8 @@ public static class LayoutFile
         return JsonSerializer.Deserialize<Root>(json, opts)!.Builds;
     }
 }
+
+
 
 
 

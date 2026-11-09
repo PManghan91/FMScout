@@ -19,6 +19,10 @@
     { "minAge": 0,  "factor": 1.0 }
   ],
 
+  // Personality: ambitious players dislike stepping down (reputation penalties x (1 + (ambition-10) * perAmbitionPoint));
+  // loyal players are harder to prise away from their current club.
+  "personality": { "perAmbitionPoint": 0.05, "loyaltyPointsPerPoint": -1.5 },
+
   "contract": { "freeAgent": 22, "within6Months": 14, "within12Months": 7 },
 
   // contract.squadStatus code -> points (fringe players are easier to prise away).
@@ -35,4 +39,5 @@
     { "min": 0,  "label": "Very unlikely" }
   ]
 }
+
 

@@ -56,6 +56,14 @@ public partial class MainWindow : Window
         RenderCompare();
         QueryBox.TextChanged += (_, _) => QueryHint.Visibility = QueryBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Closing += (_, _) => SaveSettings();
+        PreviewKeyDown += (_, e) =>
+        {
+            bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+            if (e.Key == Key.F5 || (ctrl && e.Key == Key.L)) { if (LoadButton.IsEnabled) Load_Click(this, new RoutedEventArgs()); e.Handled = true; }
+            else if (ctrl && e.Key == Key.F) { Tabs.SelectedIndex = 0; QueryBox.Focus(); QueryBox.SelectAll(); e.Handled = true; }
+            else if (ctrl && e.Key >= Key.D1 && e.Key <= Key.D6) { Tabs.SelectedIndex = Math.Min(Tabs.Items.Count - 1, e.Key - Key.D1); e.Handled = true; }
+            else if (e.Key == Key.Escape && QueryBox.IsKeyboardFocused) { QueryBox.Text = ""; ApplyFilters(); e.Handled = true; }
+        };
     }
 
     // ------------------------------------------------------------------ sidebar
@@ -245,6 +253,12 @@ public partial class MainWindow : Window
             .HeaderStyle = HeaderTip("Free agent, contract ending within 6 months, or valued at half (or less) of similar players (same CA band and age).");
         Text("vr", "Value vs typical", "Club & contract", nameof(PlayerRow.ValueRatio), p => p.ValueRatio, visible: false, fmt: "P0", style: scoreStyle)
             .HeaderStyle = HeaderTip("His value divided by the median value of players with similar CA and age. Below 50% = bargain.");
+        Text("personality", "Personality", "Basics", nameof(PlayerRow.PersonalityLabel), p => p.PersonalityLabel, visible: false, width: 130);
+        Text("outlook", "Development", "Roles", nameof(PlayerRow.OutlookText), p => p.Outlook, visible: false, width: 90)
+            .HeaderStyle = HeaderTip("Development outlook from professionalism, determination and ambition (affects the potential estimate).");
+        Text("apps", "Apps", "Moneyball", nameof(PlayerRow.CareerApps), p => p.CareerApps, visible: false, style: scoreStyle).HeaderStyle = HeaderTip("Career appearances");
+        Text("goals", "Goals", "Moneyball", nameof(PlayerRow.CareerGoals), p => p.CareerGoals, visible: false, style: scoreStyle).HeaderStyle = HeaderTip("Career goals");
+        Text("gpg", "Goals/game", "Moneyball", nameof(PlayerRow.GoalsPerGame), p => p.GoalsPerGame, visible: false, fmt: "F2", style: scoreStyle).HeaderStyle = HeaderTip("Career goals per appearance");
         Text("status", "Squad status", "Club & contract", nameof(PlayerRow.SquadStatusName), p => p.SquadStatusName, visible: false, width: 120);
         Text("rep", "Rep", "Reputation", nameof(PlayerRow.CurrentRep), p => p.CurrentRep, visible: false, style: scoreStyle);
         Text("hrep", "Home rep", "Reputation", nameof(PlayerRow.HomeRep), p => p.HomeRep, visible: false, style: scoreStyle);
@@ -305,6 +319,34 @@ public partial class MainWindow : Window
         "LeftFoot" => "L Ft", "RightFoot" => "R Ft", _ => n[..Math.Min(4, n.Length)]
     };
 
+    void ApplySortHint(string? sort)
+    {
+        if (string.IsNullOrEmpty(sort)) return;
+        bool asc = sort.StartsWith("+"); var key = sort.TrimStart('+');
+        var col = _cols.FirstOrDefault(c => c.Key == key); if (col == null) return;
+        _sortCol = col; _sortDir = asc ? ListSortDirection.Ascending : ListSortDirection.Descending;
+        if (col.Column.Visibility != Visibility.Visible) col.Column.Visibility = Visibility.Visible;
+    }
+
+    static readonly string[] Always = ["name", "age", "pos", "club", "ca", "pa"];
+    static readonly (string Name, string[] Keys)[] ColumnPresets =
+    [
+        ("Overview", ["regen", "league", "nation", "best", "bestscore", "bestpot", "join", "joinlabel", "value", "wage", "expiry"]),
+        ("Attributes", ["a.*Technical", "a.*Mental", "a.*Physical"]),
+        ("Goalkeeping", ["a.*Goalkeeping", "a.*Mental", "a.*Physical"]),
+        ("Moneyball", ["apps", "goals", "gpg", "best", "bestscore", "value", "vr", "vfm", "bargain", "join"]),
+        ("Contract & value", ["league", "status", "value", "vr", "wage", "expiry", "joined", "bargain", "join", "joinlabel"]),
+        ("Hidden & personality", ["personality", "outlook", "a.*Hidden", "rep", "wrep", "best", "bestscore", "bestpot"]),
+    ];
+
+    void ApplyColumnPreset(string[] keys)
+    {
+        bool Want(ColumnSpec c) => Always.Contains(c.Key) || keys.Contains(c.Key)
+            || keys.Any(k => k.StartsWith("a.*") && c.Group == k[3..]);
+        foreach (var c in _cols) if (c.Key is not ("role" or "rolepot" or "gain")) c.Column.Visibility = Want(c) ? Visibility.Visible : Visibility.Collapsed;
+        if (_roleCol != null && FRole.SelectedItem is RoleDef { Code: not "-" }) _roleCol.Visibility = _rolePotCol!.Visibility = Visibility.Visible;
+    }
+
     void Grid_Sorting(object sender, DataGridSortingEventArgs e)
     {
         e.Handled = true;
@@ -353,6 +395,15 @@ public partial class MainWindow : Window
             }
             menu.Items.Add(sub);
         }
+        var presets = new MenuItem { Header = "Presets" };
+        foreach (var (name, keys) in ColumnPresets)
+        {
+            var mi = new MenuItem { Header = name };
+            mi.Click += (_, _) => ApplyColumnPreset(keys);
+            presets.Items.Add(mi);
+        }
+        menu.Items.Insert(0, presets);
+        menu.Items.Insert(1, new Separator());
         var reset = new MenuItem { Header = "Reset to defaults" };
         reset.Click += (_, _) => { foreach (var c in _cols) if (c.Key is not ("role" or "rolepot")) c.Column.Visibility = c.DefaultVisible ? Visibility.Visible : Visibility.Collapsed; };
         menu.Items.Add(new Separator()); menu.Items.Add(reset);
@@ -379,6 +430,22 @@ public partial class MainWindow : Window
             if (_sortCol == null) { _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending; }
             ApplyFilters();
             BuildClubs();
+        }
+        catch (UnknownBuildException ub)
+        {
+            StatusText.Text = $"FM build {ub.Build} is new to FM27 Scout.";
+            var ask = MessageBox.Show(this,
+                $"FM27 has been updated (engine build {ub.Build}) and FM27 Scout doesn't know this build yet.\n\n" +
+                "Run Patch Doctor now? It re-finds the moved data in the running game (read-only), checks it against known players, " +
+                "and saves a new layout. It takes a few minutes; keep FM27 open with your save loaded.",
+                "FM27 Scout – new FM build", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (ask == MessageBoxResult.Yes)
+            {
+                var r = await Task.Run(() => GameLoader.RunPatchDoctor(ub.Build, progress));
+                MessageBox.Show(this, (r.Ok ? "Patch Doctor succeeded. Loading now.\n\n" : "Patch Doctor could not fix the layout:\n\n") + string.Join("\n", r.Log),
+                    "FM27 Scout – Patch Doctor", MessageBoxButton.OK, r.Ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                if (r.Ok) { LoadButton.IsEnabled = true; Load_Click(sender, e); return; }
+            }
         }
         catch (UserFacingException ex)
         {
@@ -496,7 +563,69 @@ public partial class MainWindow : Window
 
     internal void SelectTab(int i) => Tabs.SelectedIndex = i;
 
+    internal string SelfTestQa()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Staff: {_staff.Count:N0} (employed {_staff.Count(s => s.Source.Club != null):N0}); jobs: " + string.Join(", ", _staff.GroupBy(s => s.Job).OrderByDescending(g => g.Count()).Take(8).Select(g => $"{(g.Key == "" ? "(none)" : g.Key)} {g.Count()}")));
+        foreach (var n in new[] { "Korey Smith", "Byron Anthony", "Richard Thomas", "Millie Bombroff", "Michael Reiziger", "Alan Wright", "Mauro Castañares", "Marko Vukčević" })
+        {
+            var s = _staff.FirstOrDefault(x => x.Name == n && x.Age is > 30);
+            sb.Append(s == null ? $"{n}: not found; " : $"{n}: {s.Job} @ {s.Club} ({s.Personality}, £{s.Wage}); ");
+        }
+        sb.AppendLine();
+        sb.AppendLine("Player personalities: " + string.Join(", ", _all.GroupBy(p => p.PersonalityLabel).OrderByDescending(g => g.Count()).Select(g => $"{g.Key} {g.Count():N0}")));
+        foreach (var n in new[] { "Erling Haaland", "Jonas Urbig", "Bart Verbruggen", "Lamine Yamal" })
+        { var p = _all.FirstOrDefault(x => x.Name == n); sb.Append($"{n}={p?.PersonalityLabel} (apps {p?.CareerApps}, goals {p?.CareerGoals}); "); }
+        sb.AppendLine();
+        foreach (var s in Presets)
+        {
+            WriteFilter(s.Filter); _upgrade = null; ApplySortHint(s.Filter.Sort);
+            string err = ""; try { ApplyFilters(); } catch (Exception ex) { err = " EXCEPTION " + ex.Message; }
+            sb.AppendLine($"preset [{s.Name}] -> {_view.Count:N0}{err}; top: " + string.Join(", ", _view.Take(2).Select(p => $"{p.Name} ({p.Age}, {p.Club}, CA {p.CA}/PA {p.PA}, join {p.Join:F0})")));
+        }
+        foreach (var (name, keys) in ColumnPresets) { ApplyColumnPreset(keys); sb.AppendLine($"column preset {name}: {_cols.Count(c => c.Column.Visibility == Visibility.Visible)} visible"); }
+        ApplyColumnPreset(ColumnPresets[0].Keys);
+        WriteFilter(new FilterState());
+        foreach (var q in new[] { "personality:professional age<=21 pa>=150", "prof>=18 ambition>=15 age<=19", "outlook:excellent newgen pa>=160", "apps>=300 goals>=150", "status:\"Squad Player\" join>=60 ca>=110", "uid=29179241" })
+        {
+            QueryBox.Text = q; StatusText.Text = ""; ApplyFilters();
+            sb.AppendLine($"query [{q}] -> {(StatusText.Text.StartsWith("Query error") ? StatusText.Text : _view.Count.ToString("N0"))}");
+        }
+        WriteFilter(new FilterState()); ApplyFilters();
+        return sb.ToString();
+    }
+
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; ShowProfile(_view[i]); } }
+
+    // ------------------------------------------------------------------ staff
+    List<StaffRow> _staff = [];
+    bool _suppressStaff;
+    void BuildStaff(List<StaffRow> staff)
+    {
+        _staff = staff;
+        _suppressStaff = true;
+        StaffJob.ItemsSource = new[] { "(any)" }.Concat(staff.Select(s => s.Job).Where(j => j.Length > 0).Distinct().OrderBy(j => j.StartsWith("Job ") ? 1 : 0).ThenBy(j => j)).ToList();
+        StaffJob.SelectedIndex = 0;
+        StaffPersonality.ItemsSource = new[] { "(any)" }.Concat(staff.Select(s => s.Personality).Distinct().OrderBy(x => x)).ToList();
+        StaffPersonality.SelectedIndex = 0;
+        _suppressStaff = false;
+        ShowStaff();
+    }
+    void StaffFilter_Changed(object s, TextChangedEventArgs e) => ShowStaff();
+    void StaffJob_Changed(object s, SelectionChangedEventArgs e) { if (!_suppressStaff) ShowStaff(); }
+    void StaffEmployed_Click(object s, RoutedEventArgs e) => ShowStaff();
+    void ShowStaff()
+    {
+        if (StaffGrid == null) return;
+        var q = StaffFilter.Text.Trim();
+        var job = StaffJob.SelectedItem as string; var per = StaffPersonality.SelectedItem as string;
+        var list = _staff.Where(s => (StaffEmployed.IsChecked != true || s.Source.Club != null)
+                && (job is null or "(any)" || s.Job == job) && (per is null or "(any)" || s.Personality == per)
+                && (q.Length == 0 || $"{s.Name} {s.Club} {s.Nation} {s.Job} {s.Competition}".Contains(q, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(s => s.Club).ThenBy(s => s.Job).ToList();
+        StaffGrid.ItemsSource = list;
+        StaffCount.Text = $"{list.Count:N0} of {_staff.Count:N0} staff";
+    }
 
     // ------------------------------------------------------------------ squad, comparison, upgrades
     FilterState? _upgrade;
@@ -675,6 +804,7 @@ public partial class MainWindow : Window
 
     void AfterLoad(LoadResult res)
     {
+        BuildStaff(res.Staff);
         _today = res.GameDate ?? _today;
         var clubs = _all.Where(p => p.Source.Club != null).GroupBy(p => p.Club)
             .Select(g => new MyClub(g.Key, g.Max(p => p.ClubRep), g.Max(p => p.Wage), g.Sum(p => p.Value), g.Count())).ToList();
@@ -736,8 +866,11 @@ public partial class MainWindow : Window
         Fact("Wage", p.Wage > 0 ? MoneyText.Format(p.Wage) + " p/w" : "-");
         Fact("Expires", p.ContractExpiry?.ToString("dd/MM/yyyy") ?? "-");
         Fact("Height", $"{p.Height} cm");
+        if (p.CareerApps > 0) Fact("Career", $"{p.CareerApps} apps · {p.CareerGoals} goals");
         Fact("Feet", $"L {p.LeftFoot} / R {p.RightFoot}");
         Fact("Reputation", $"{p.CurrentRep:N0}");
+        if (p.PersonalityLabel.Length > 0) Fact("Personality", p.PersonalityLabel);
+        if (p.Age <= 23) Fact("Development", p.OutlookText);
         if (p.SquadStatusName.Length > 0) Fact("Status", p.SquadStatusName);
         Profile.Children.Add(facts);
 
@@ -824,7 +957,7 @@ public partial class MainWindow : Window
         }
         Profile.Children.Add(pw);
         Profile.Children.Add(new Border { Height = 10 });
-        Profile.Children.Add(T($"Hidden personality values (order not yet mapped): {string.Join(" ", p.Personality)}", 11, fg: muted));
+        Profile.Children.Add(T("Personality (hidden, 1-20): " + string.Join(" · ", Model.Personality.Names.Select((n, i) => i < p.Personality.Length ? $"{n} {p.Personality[i]}" : "")), 11, fg: muted));
         Profile.Children.Add(T($"UID {p.Uid}", 11, fg: muted));
     }
 
@@ -862,14 +995,16 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ saved searches / settings / roles
     static readonly List<SavedSearch> Presets =
     [
-        new() { Name = "★ Wonderkid regens (≤19, PA 150+)", Filter = new FilterState { Query = "regen age<=19 pa>=150" } },
-        new() { Name = "★ Best young regens we could get", Filter = new FilterState { Query = "regen age<=21 pa>=130", GettableOnly = true } },
-        new() { Name = "★ Bargains we could get", Filter = new FilterState { Query = "bargain ca>=100", GettableOnly = true } },
-        new() { Name = "★ Undervalued high potential", Filter = new FilterState { Query = "age<=23 pa>=150 valueratio<=0.6" } },
-        new() { Name = "★ Latest youth intakes (newgens joined this year)", Filter = new FilterState { Query = "regen age<=17 joined>=2037 pa>=120" } },
-        new() { Name = "★ Value for money we could get", Filter = new FilterState { Query = "ca>=90 vfm>=40", GettableOnly = true } },
-        new() { Name = "★ Free agents (CA 100+)", Filter = new FilterState { Query = "free ca>=100" } },
-        new() { Name = "★ Contracts ending, gettable", Filter = new FilterState { Query = "ca>=100 contract<=2037", GettableOnly = true } },
+        new() { Name = "★ Wonderkid regens (≤19, PA 150+)", Filter = new FilterState { Query = "regen age<=19 pa>=150", Sort = "pa" } },
+        new() { Name = "★ Best young regens we could get", Filter = new FilterState { Query = "regen age<=21 pa>=130", GettableOnly = true, Sort = "bestpot" } },
+        new() { Name = "★ Bargains we could get", Filter = new FilterState { Query = "bargain ca>=100", GettableOnly = true, Sort = "bestpot" } },
+        new() { Name = "★ Undervalued high potential", Filter = new FilterState { Query = "age<=23 pa>=150 valueratio<=0.6", Sort = "pa" } },
+        new() { Name = "★ Latest youth intakes (newgens joined this year)", Filter = new FilterState { Query = "regen age<=17 joined>=2037 pa>=120", Sort = "pa" } },
+        new() { Name = "★ Value for money we could get", Filter = new FilterState { Query = "ca>=100 vfm>=40", GettableOnly = true, Sort = "vfm" } },
+        new() { Name = "★ Moneyball: proven scorers we could get", Filter = new FilterState { Query = "gpg>=0.4 apps>=60 age<=30 ca>=90", GettableOnly = true, Sort = "gpg" } },
+        new() { Name = "★ Moneyball: young players with first-team experience", Filter = new FilterState { Query = "age<=21 apps>=40 pa>=130", Sort = "apps" } },
+        new() { Name = "★ Free agents (CA 100+)", Filter = new FilterState { Query = "free ca>=100", Sort = "bestscore" } },
+        new() { Name = "★ Contracts ending, gettable", Filter = new FilterState { Query = "ca>=100 contract<=2037", GettableOnly = true, Sort = "bestscore" } },
     ];
 
     void RefreshSaved()
@@ -886,7 +1021,7 @@ public partial class MainWindow : Window
     {
         if (_suppressSaved || SavedCombo.SelectedItem is not SavedSearch s) return;
         WriteFilter(s.Filter);
-        if (Presets.Contains(s)) { _sortCol = _cols.First(c => c.Key == (s.Filter.Query.Contains("regen") || s.Filter.Query.Contains("pa>=") ? "pa" : "bestscore")); _sortDir = ListSortDirection.Descending; }
+        ApplySortHint(s.Filter.Sort);
         ApplyFilters();
     }
 
@@ -958,6 +1093,12 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
+
+
+
+
+
 
 
 

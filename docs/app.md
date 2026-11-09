@@ -78,7 +78,37 @@ Add players with right-click › Add to shortlist. Filter with the sidebar's **S
 Squads built from the loaded players: player count, average and best CA, average PA, average age, squad value, wage bill and best player. Double-click a club to list its players.
 
 ### Staff tab
-Not done yet. Staff use a separate person class in the game's database, and their coaching attributes still need mapping.
+* Lists every staff member at men's clubs (about 60k in total, 20k employed). It shows job, club, league or team, age, nation, personality, professionalism, ambition, loyalty, wage, contract expiry and previous club.
+* You can search, and filter by job, personality and "employed by a club".
+* Job names are known for Coach, Physio, Scout, Manager and Assistant Manager. Other jobs show as "Job N" until they are identified.
+* **Staff coaching and knowledge attributes are not shown.** FM27 displays them as word bands that don't follow from any single stored value. I tested this on 8 staff from screenshots, including within-person ordering and every byte up to two pointer hops away, and nothing reproduced them. I'd rather show nothing than show made-up numbers.
+
+### Personality and development
+* The 8 hidden personality values are read in this order: Adaptability, Ambition, Loyalty, Pressure, Professionalism, Sportsmanship, Temperament, Controversy.
+* The **Personality** label (Professional, Driven, Perfectionist, Fairly Loyal, Balanced, …) reproduces all 12 labels seen in the screenshots. Other labels use the same rules and are estimates.
+* **Development** (Excellent, Good, Average, Poor) is based on Professionalism, Determination and Ambition. It also adjusts the potential estimate: poor trainers reach less of their PA, good ones slightly more.
+* The Join estimate now includes **ambition** (ambitious players dislike stepping down) and **loyalty** (loyal players are harder to prise away).
+* Query terms: `personality:professional`, `prof>=18`, `ambition>=15`, `loyalty<=8`, `outlook:excellent`.
+
+### Moneyball
+* **Career apps** and **career goals** come from the player's stats object. They match the in-game career totals of 5 players. **Goals/game** is worked out from those two.
+* Query terms: `apps>=100`, `goals>=50`, `gpg>=0.4`. There are two built-in searches: proven scorers we could get, and young players with first-team experience.
+* Season-by-competition stats (average rating, xG, assists) aren't decoded yet.
+
+### Column presets and shortcuts
+* **Columns ▾ › Presets:** Overview, Attributes, Goalkeeping, Moneyball, Contract & value, Hidden & personality.
+* **Shortcuts:** F5 or Ctrl+L loads or refreshes; Ctrl+F jumps to the query bar; Ctrl+1–5 switches tabs; Esc in the query bar clears it.
+
+### Patch Doctor (after an FM update)
+1. When FM27 is patched, the engine build changes and **Load from game** says the build is new. It offers to run **Patch Doctor**.
+2. Patch Doctor (read-only, a few minutes):
+   * finds known real players by full name (Haaland, Yamal, Bellingham, Saka);
+   * from them, finds the player class and the master person list, then the static pointer to that list;
+   * checks the player block against stable facts (PA and height) and re-searches it if it moved;
+   * shifts the other class and data addresses by the same amounts and validates each one.
+3. The new build section is saved to `%APPDATA%\FM27Scout\fm27-layout.json`, and the app loads straight away.
+4. Tested by simulating a patch (static data, vtables and player block all moved): it recovered every value exactly.
+5. If a patch changes the internal structures themselves, Patch Doctor reports exactly which part failed.
 
 ## Role scores
 * `score = Σ(weight × attribute) / Σ(weight) × 5`, which gives 0-100. It is then multiplied by a familiarity factor taken from the player's best rating among the role's positions.
@@ -106,6 +136,7 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
 
 

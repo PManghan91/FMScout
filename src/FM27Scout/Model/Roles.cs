@@ -123,6 +123,8 @@ public sealed class RoleSet
         double g = Growth(p);
         // expected CA gain = remaining headroom (PA-CA) damped by age; then spread over attributes by the fitted model
         double caGain = p.PA > p.CA ? (p.PA - p.CA) * AgeFactor(p.Age) : 0;
+        // development outlook (personality): poor trainers reach less of their PA, good ones a bit more (0.85x - 1.1x)
+        if (p.Outlook > 0) caGain = Math.Min(p.PA - p.CA, caGain * Math.Clamp(0.85 + (p.Outlook - 8) * 0.025, 0.85, 1.1));
         double[]? proj = Potential != null && caGain > 0 ? Potential.ProjectToCa(p, caGain) : null;
         for (int i = 0; i < Roles.Length; i++)
         {
@@ -137,6 +139,7 @@ public sealed class RoleSet
     public int IndexOf(string codeOrName) => Array.FindIndex(Roles, r =>
         r.Code.Equals(codeOrName, StringComparison.OrdinalIgnoreCase) || r.Name.Equals(codeOrName, StringComparison.OrdinalIgnoreCase));
 }
+
 
 
 

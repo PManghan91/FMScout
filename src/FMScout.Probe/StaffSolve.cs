@@ -22,6 +22,101 @@ static class StaffSolve
         ("Alan Wright", 1971, ["Competent","Good","Unsuited","Unsuited","Competent","Competent","Good","Average","Outstanding", "Reasonable","Very Good","Good","Good","Competent", "Average","Average","Competent","Reasonable","Good", null,null,null]),
     ];
 
+    /// <summary>Relative hypothesis: within each person, a higher band means a higher stored value. Backtracking assignment.</summary>
+    static void Within(FmGame g, List<(string name, ulong v)> people)
+    {
+        var m = g.Memory;
+        var vals = people.Select(p => { var b = m.ReadBytes(p.v + 0x150, 52)!; return b.Select((x, i) => i < 28 ? x * 5.0 : x).ToArray(); }).ToArray();
+        int nA = 19; // coaching 9 + mental 5 + knowledge 5
+        int[] assign = Enumerable.Repeat(-1, nA).ToArray(); var used = new bool[52];
+        long nodes = 0; int solutions = 0;
+        bool Consistent(int a)
+        {
+            for (int b = 0; b < nA; b++)
+            {
+                if (b == a || assign[b] < 0) continue;
+                for (int p = 0; p < people.Count; p++)
+                {
+                    var ba = Truth[p].B[a]; var bb = Truth[p].B[b]; if (ba == null || bb == null) continue;
+                    int ra = Array.IndexOf(Order, ba), rb = Array.IndexOf(Order, bb);
+                    double va = vals[p][assign[a]], vb = vals[p][assign[b]];
+                    if (ra < rb && va >= vb) return false;
+                    if (ra > rb && va <= vb) return false;
+                }
+            }
+            return true;
+        }
+        void Solve(int a)
+        {
+            if (++nodes > 50_000_000 || solutions >= 5) return;
+            if (a == nA)
+            {
+                solutions++;
+                Console.WriteLine("SOLUTION: " + string.Join(", ", Enumerable.Range(0, nA).Select(i => $"{Attrs[i]}={assign[i]}")));
+                return;
+            }
+            for (int k = 0; k < 52; k++)
+            {
+                if (used[k]) continue;
+                assign[a] = k; used[k] = true;
+                if (Consistent(a)) Solve(a + 1);
+                used[k] = false; assign[a] = -1;
+            }
+        }
+        Solve(0);
+        Console.WriteLine($"nodes {nodes}, solutions {solutions}");
+    }
+
+    static void Referrers(FmGame g, List<(string name, ulong v)> people)
+    {
+        var m = g.Memory; var gp = m.Module("game_plugin.dll")!.Value;
+        bool InMod(ulong x) => x >= gp.Base && x < gp.Base + (ulong)gp.Size;
+        var hits = m.ScanPointersToAny(people.Select(p => p.v).ToHashSet(), privateOnly: true, max: 2_000_000);
+        Console.WriteLine($"{hits.Count} references to the 8 staff");
+        // structure signature: nearest vtable-like qword at or before the reference (up to 0x400 back)
+        var sig = new Dictionary<(ulong vt, long off), Dictionary<int, ulong>>();
+        foreach (var (at, val) in hits)
+        {
+            int pi = people.FindIndex(p => p.v == val);
+            var back = m.ReadBytes(at - 0x400, 0x408); if (back == null) continue;
+            for (int k = 0x400; k >= 0; k -= 8)
+            {
+                ulong q = BitConverter.ToUInt64(back, k);
+                if (!InMod(q)) continue;
+                ulong baseAddr = at - 0x400 + (ulong)k;
+                var key = (q - gp.Base, (long)(at - baseAddr));
+                if (!sig.TryGetValue(key, out var d)) sig[key] = d = new();
+                d.TryAdd(pi, baseAddr);
+                break;
+            }
+        }
+        var common = sig.Where(kv => kv.Value.Count == people.Count).ToList();
+        Console.WriteLine($"{common.Count} structure types reference all 8");
+        foreach (var (key, d) in common)
+        {
+            var bufs = Enumerable.Range(0, people.Count).Select(i => m.ReadBytes(d[i], 0x600)).ToArray();
+            if (bufs.Any(b => b == null)) continue;
+            int found = 0; var lines = new List<string>();
+            for (int ai = 0; ai < Attrs.Length; ai++)
+            {
+                var cands = new List<int>();
+                for (int k = 0; k < 0x600; k++)
+                {
+                    var vals = new List<(int r, int v)>();
+                    for (int p = 0; p < people.Count; p++) { var b = Truth[p].B[ai]; if (b != null) vals.Add((Array.IndexOf(Order, b), bufs[p]![k])); }
+                    if (vals.Count < 2 || vals.Any(v => v.v == 0 || v.v > 100)) continue;
+                    bool ok = true;
+                    foreach (var x in vals) foreach (var y in vals) if (x.r < y.r && x.v >= y.v) ok = false;
+                    if (ok && vals.Select(v => v.v).Distinct().Count() >= Math.Min(3, vals.Select(v => v.r).Distinct().Count())) cands.Add(k);
+                }
+                if (cands.Count is > 0 and < 30) found++;
+                lines.Add($"   {Attrs[ai],-14} {(cands.Count >= 30 ? cands.Count + " cands" : string.Join(",", cands.Select(k => $"+0x{k:X}")))}");
+            }
+            Console.WriteLine($"== struct vt rva 0x{key.vt:X} (ref at +0x{key.off:X}): {found}/{Attrs.Length}");
+            if (found >= 8) lines.ForEach(Console.WriteLine);
+        }
+    }
+
     public static void Run(FmGame g)
     {
         var m = g.Memory; var gp = m.Module("game_plugin.dll")!.Value; ulong vt = gp.Base + 0x4D8DE78;
@@ -33,6 +128,9 @@ static class StaffSolve
             Console.WriteLine($"{t.Name} b.{t.Year}: {hits.Count} match(es) {string.Join(",", hits.Select(h => $"0x{h:X}"))}");
             if (hits.Count == 1) people.Add((t.Name, hits[0])); else throw new Exception("ambiguous/missing " + t.Name);
         }
+
+        if (Environment.GetEnvironmentVariable("STAFF_REFERRERS") == "1") { Referrers(g, people); return; }
+        if (Environment.GetEnvironmentVariable("STAFF_WITHIN") == "1") { Within(g, people); return; }
 
         // candidate sources: direct window around the person, and blocks reachable through pointers in the person
         const int W = 0x400;
@@ -75,5 +173,7 @@ static class StaffSolve
         }
     }
 }
+
+
 
 

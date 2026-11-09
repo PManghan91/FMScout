@@ -43,12 +43,15 @@ public partial class App : Application
         log.WriteLine(w.SelfTestPotential());
         log.WriteLine(w.SelfTestRegens());
         log.WriteLine(w.SelfTestUpgrade());
+        log.WriteLine(w.SelfTestQa());
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
         Render(w, Path.Combine(outDir, "selftest-players.png"), 0);
         Render(w, Path.Combine(outDir, "selftest-squad.png"), 1);
         Render(w, Path.Combine(outDir, "selftest-compare.png"), 2);
+        Render(w, Path.Combine(outDir, "selftest-clubs.png"), 3);
+        Render(w, Path.Combine(outDir, "selftest-staff.png"), 4);
         File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString());
     }
 
@@ -77,6 +80,7 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
 
 
 

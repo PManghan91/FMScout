@@ -15,6 +15,7 @@ public sealed class JoinModel
     public sealed class AgeRule { public int MinAge { get; set; } public double Factor { get; set; } = 1; }
     public sealed class ContractRules { public double FreeAgent { get; set; } = 20; public double Within6Months { get; set; } = 12; public double Within12Months { get; set; } = 6; }
     public sealed class WageRules { public double OverTopEarnerFactor { get; set; } = 1.3; public double OverTopEarnerPoints { get; set; } = -15; public double WayOverFactor { get; set; } = 2; public double WayOverPoints { get; set; } = -40; public double WithinTopEarnerPoints { get; set; } = 4; }
+    public sealed class PersonalityRules { public double PerAmbitionPoint { get; set; } = 0.05; public double LoyaltyPointsPerPoint { get; set; } = -1.5; }
     public sealed class FeeRules { public double OverSquadValueShare { get; set; } = 0.25; public double Points { get; set; } = -20; }
     public sealed class Label { public double Min { get; set; } public string Text { get; set; } = ""; public string LabelName { get => Text; set => Text = value; } }
 
@@ -26,6 +27,7 @@ public sealed class JoinModel
     public Dictionary<string, double> SquadStatus { get; set; } = new();
     public WageRules Wage { get; set; } = new();
     public FeeRules Fee { get; set; } = new();
+    public PersonalityRules Personality { get; set; } = new();
     public JsonElement[] Labels { get; set; } = [];
     public string? SourcePath { get; private set; }
     List<(double min, string text)> _labels = [];
@@ -64,13 +66,15 @@ public sealed class JoinModel
         }
         double s = Base;
         double ageF = AgePenaltyFactor.OrderByDescending(a => a.MinAge).FirstOrDefault(a => (p.Age ?? 0) >= a.MinAge)?.Factor ?? 1;
+        double ambF = 1 + (p.Ambition - 10) * Personality.PerAmbitionPoint;
+        ageF *= Math.Max(0.5, ambF);
 
         // reputation of the player vs our club
         double rg = p.CurrentRep - my.Reputation;
         double rp = Gap(PlayerReputation, rg); if (rp < 0) rp *= ageF;
         s += rp;
         reasons.Add(rg > 0
-            ? $"{Pts(rp)} Reputation {p.CurrentRep:N0} vs your club {my.Reputation:N0}{(ageF < 1 ? $" (softened ×{ageF:0.##} for age {p.Age})" : "")}"
+            ? $"{Pts(rp)} Reputation {p.CurrentRep:N0} vs your club {my.Reputation:N0} (×{ageF:0.##} for age {p.Age}, ambition {p.Ambition})"
             : $"{Pts(rp)} Your club's reputation ({my.Reputation:N0}) is at or above his ({p.CurrentRep:N0})");
 
         // stepping down from his current club
@@ -80,6 +84,13 @@ public sealed class JoinModel
             double cp = Gap(ClubStep, cg); if (cp < 0) cp *= ageF;
             s += cp;
             reasons.Add(cg > 0 ? $"{Pts(cp)} Step down from {p.Club} (club rep {p.ClubRep:N0})" : $"{Pts(cp)} Step up from {p.Club} (club rep {p.ClubRep:N0})");
+        }
+
+        // loyalty to his current club
+        if (p.Source.Club != null && p.Loyalty > 10)
+        {
+            double lp = (p.Loyalty - 10) * Personality.LoyaltyPointsPerPoint;
+            s += lp; reasons.Add($"{Pts(lp)} Loyal to his club (loyalty {p.Loyalty})");
         }
 
         // contract
@@ -111,7 +122,7 @@ public sealed class JoinModel
             s += Fee.Points; reasons.Add($"{Pts(Fee.Points)} Value {MoneyText.Format(p.Value)} is large vs your squad value {MoneyText.Format(my.SquadValue)}");
         }
 
-        reasons.Add("Not yet included: ambition/loyalty (personality), favourite/disliked clubs, finances, work permits.");
+        reasons.Add("Not included: favourite/disliked clubs, real budgets, work permits (not decoded yet).");
         p.Join = Math.Clamp(s, 0, 100);
         p.JoinLabel = LabelFor(p.Join);
         p.JoinReasons = reasons;
@@ -119,3 +130,4 @@ public sealed class JoinModel
 
     static string Pts(double v) => v >= 0 ? $"+{v:0}" : $"{v:0}";
 }
+

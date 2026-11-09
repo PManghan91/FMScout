@@ -47,7 +47,8 @@
         "weeklyWage": "0x20",    // u32, GBP per week (inside UI wage range for all 3 test players)
         "startDate": "0x44",     // date (day field has flags in upper bits)
         "expiryDate": "0x48",    // date, confirmed (30/6/2038, 30/6/2037, 30/6/2040)
-        "squadStatus": "0x54"    // u8, see squadStatusNames
+        "squadStatus": "0x54",   // u8, see squadStatusNames
+        "job": "0x26"            // u8 job code, see jobNames
       },
       "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48" },
 
@@ -59,6 +60,9 @@
         "currentAbility": "-0x24",   // s16 1-200
         "potentialAbility": "-0x22", // s16 1-200 (negative = range, none seen in this save)
         "commonName": "-0x198",
+        "careerStats": "-0x178",     // pointer to career stats object (verified on 5 players vs UI career totals)
+        "careerGoals": "0x6",        // u16 in that object
+        "careerApps": "0xE",         // u16 in that object
         "homeReputation": "-0x2A",   // u16 0-10000 (likely: Bristol Rovers players ~5000)
         "currentReputation": "-0x28",// u16 0-10000
         "worldReputation": "-0x26",  // u16 0-10000 (Haaland 9852, Bristol Rovers players ~2500)      // FMString* known-as name, null if none (Yamal -> "Lamine Yamal")
@@ -81,10 +85,16 @@
         "Consistency", "Aggression", "Agility", "ImportantMatches", "InjuryProneness", "Versatility", "NaturalFitness", "Determination",
         "Composure", "Concentration"
       ],
-      "personalityNames": [ "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7" ]
+      // Order solved from 12 UI personality labels (players + staff): see docs/ground-truth-brr.md
+      "personalityNames": [ "Adaptability", "Ambition", "Loyalty", "Pressure", "Professionalism", "Sportsmanship", "Temperament", "Controversy" ],
+      "staffVtableRva": "0x4D8DE78",
+      // contract.job codes seen in the UI: 1 player, 2 Coach, 12 Physio, 14 Scout, 16 Manager, 20 Assistant Manager
+      "jobNames": { "1": "Player", "2": "Coach", "12": "Physio", "14": "Scout", "16": "Manager", "20": "Assistant Manager" }
     }
   }
 }
+
+
 
 
 

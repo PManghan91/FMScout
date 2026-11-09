@@ -48,6 +48,8 @@ public sealed class FilterState
     public bool ShortlistOnly { get; set; }
     public string? UpgradeClub { get; set; }
     public string Query { get; set; } = "";
+    /// <summary>Optional default sort for built-in searches (column key, descending unless prefixed with "+").</summary>
+    public string? Sort { get; set; }
 }
 
 public sealed class SavedSearch
@@ -170,7 +172,7 @@ public static class FilterBuilder
         {
             "name" => p => p.Name + " " + p.FullName, "club" => p => p.Club, "league" or "comp" => p => p.League,
             "nation" or "nat" => p => p.Nation, "foot" => p => p.Foot, "status" => p => p.SquadStatusName,
-            "joinlabel" or "willing" => p => p.JoinLabel, _ => null
+            "joinlabel" or "willing" => p => p.JoinLabel, "personality" or "pers" => p => p.PersonalityLabel, "outlook" or "development" => p => p.OutlookText, _ => null
         };
         if (text != null)
         {
@@ -191,7 +193,7 @@ public static class FilterBuilder
             "age" => p => p.Age ?? 0, "ca" => p => p.CA, "pa" => p => p.PA, "height" => p => p.Height,
             "value" => p => p.Value, "wage" => p => p.Wage, "best" => p => p.BestRoleScore, "pot" or "potbest" => p => p.BestPotentialScore,
             "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, "join" => p => p.Join,
-            "valueratio" or "vr" => p => p.ValueRatio, "uid" => p => p.Uid, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
+            "valueratio" or "vr" => p => p.ValueRatio, "uid" => p => p.Uid, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "ambition" => p => p.Ambition, "apps" or "careerapps" => p => p.CareerApps, "goals" or "careergoals" => p => p.CareerGoals, "gpg" => p => p.GoalsPerGame, "loyalty" => p => p.Loyalty, "professionalism" or "prof" => p => p.Professionalism, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
         };
         if (num == null)
         {
@@ -263,3 +265,6 @@ public static class Shortlist
     public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); File.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
     public static int Count => Ids.Count;
 }
+
+
+

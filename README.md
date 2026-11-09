@@ -1,6 +1,16 @@
 # FM27 Scout
 
-**The app:** see [docs/app.md](docs/app.md). It is a WPF, single-file `FM27Scout.exe` with Players and Clubs tabs, role scores, filters, a query bar and saved searches.
+## Quick start
+1. Start **Football Manager 27** and load your save.
+2. Run **`FM27Scout.exe`**. It is a single file and needs no install. Build it with `dotnet publish src/FM27Scout -c Release -o publish`.
+3. Press **Load from game** (F5). Your club is detected automatically.
+4. Use these tabs:
+   * **Players:** filter with the sidebar or the query bar, or pick a ★ built-in search (wonderkids, bargains, moneyball, …). Click a player for his profile and "Would he join us?".
+   * **Squad:** your squad. Right-click a player for compare, shortlist or **Find upgrade**.
+   * **Compare**, **Clubs** and **Staff**.
+5. It is read-only: it never writes to FM. After an FM update, accept **Patch Doctor** when asked.
+
+The full user guide is in [docs/app.md](docs/app.md).
 
 The rest of this README documents the memory reader and how the layout was found.
 
@@ -123,6 +133,7 @@ dotnet build -c Release
 src\FMScout.Probe\bin\Release\net10.0\FMScout.Probe.exe report Haaland Saka
 ```
 This needs FM27 running with a save loaded. It targets .NET 10 (the SDK installed here) on x64.
+
 
 
 

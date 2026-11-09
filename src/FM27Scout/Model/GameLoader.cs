@@ -15,9 +15,11 @@ public sealed class LoadResult
     public long Millis { get; init; }
     public string LayoutSource { get; init; } = "";
     public List<string> HumanClubs { get; init; } = [];
+    public List<StaffRow> Staff { get; init; } = [];
 }
 
 public sealed class UserFacingException(string msg) : Exception(msg);
+public sealed class UnknownBuildException(string build) : Exception($"Unknown FM build {build}") { public string Build { get; } = build; }
 
 public static class GameLoader
 {
@@ -27,12 +29,34 @@ public static class GameLoader
 
     public static bool IsWomensName(string? s) => s != null && WomenWords.IsMatch(s);
 
-    /// <summary>Layout: fm27-layout.json next to the exe overrides the built-in copy (quick patching).</summary>
+    public static string UserLayoutPath => Path.Combine(AppPaths.Data, "fm27-layout.json");
+
+    /// <summary>
+    /// Layouts: built-in, then fm27-layout.json next to the exe, then %APPDATA%\FM27Scout\fm27-layout.json (written by
+    /// Patch Doctor). Later files add builds or override the same build.
+    /// </summary>
     public static (Dictionary<string, BuildLayout> Layouts, string Source) LoadLayouts()
     {
-        var local = Path.Combine(AppPaths.ExeDir, "fm27-layout.json");
-        if (File.Exists(local)) return (LayoutFile.Parse(File.ReadAllText(local)), local);
-        return (LayoutFile.Parse(Embedded.Read("fm27-layout.json")), "built-in");
+        var all = LayoutFile.Parse(Embedded.Read("fm27-layout.json"));
+        var src = "built-in";
+        foreach (var path in new[] { Path.Combine(AppPaths.ExeDir, "fm27-layout.json"), UserLayoutPath })
+        {
+            if (!File.Exists(path)) continue;
+            try { foreach (var (k, v) in LayoutFile.Parse(File.ReadAllText(path))) all[k] = v; src += " + " + path; }
+            catch { /* ignore a broken override file */ }
+        }
+        return (all, src);
+    }
+
+    /// <summary>Runs Patch Doctor against the running game using the newest known layout as the template.</summary>
+    public static PatchDoctor.Result RunPatchDoctor(string build, IProgress<string>? progress)
+    {
+        var (layouts, _) = LoadLayouts();
+        var template = layouts.Values.Last();
+        using var m = ProcessMemory.Attach("fm");
+        var r = PatchDoctor.Run(m, template, build, progress);
+        if (r.Ok && r.Layout != null) PatchDoctor.Save(UserLayoutPath, build, r.Layout, Embedded.Read("fm27-layout.json"));
+        return r;
     }
 
     /// <summary>
@@ -85,11 +109,10 @@ public static class GameLoader
         {
             throw new UserFacingException("Football Manager 27 isn't running.\n\nStart FM27, load your save, then press Load from game.");
         }
-        catch (NotSupportedException ex)
+        catch (NotSupportedException)
         {
-            throw new UserFacingException(
-                "This FM27 build isn't supported yet (the game was probably patched).\n\n" + ex.Message +
-                "\n\nTo fix: put an updated fm27-layout.json next to FM27Scout.exe. The app reads it in place of its built-in layout.");
+            var p = System.Diagnostics.Process.GetProcessesByName("fm").FirstOrDefault();
+            throw new UnknownBuildException(p == null ? "?" : FmGame.DetectBuild(p, layouts.Values.First().Module) ?? "?");
         }
 
         using (game)
@@ -121,7 +144,25 @@ public static class GameLoader
                     PositionsText = Positions.Describe(p.Positions),
                     SquadStatusName = p.Club == null ? "" : game.Layout.SquadStatusNames.TryGetValue(p.SquadStatus.ToString(), out var sn) ? sn : $"Status {p.SquadStatus}",
                 };
+                int det = a[Math.Max(0, Attr.Index("Determination"))];
+                row.PersonalityLabel = Personality.Label(p.Personality, det);
+                row.Outlook = Personality.Outlook(p.Personality, det);
                 rows.Add(row);
+            }
+            progress?.Report("Reading staff…");
+            var staff = new List<StaffRow>();
+            foreach (var v in persons)
+            {
+                if (!game.IsStaff(v)) continue;
+                StaffInfo s; try { s = game.ReadStaff(v); } catch { continue; }
+                if (IsWomensName(s.Club) || IsWomensName(s.Competition)) continue; // men's game only (staff themselves may be any gender)
+                staff.Add(new StaffRow
+                {
+                    Source = s,
+                    Job = s.Club == null && s.JobCode == 0 ? "" : game.Layout.JobNames.TryGetValue(s.JobCode.ToString(), out var jn) ? jn : $"Job {s.JobCode}",
+                    Age = s.DateOfBirth is { } d ? today.Year - d.Year - (today.DayOfYear < d.DayOfYear ? 1 : 0) : null,
+                    Personality = Personality.Label(s.Personality, null),
+                });
             }
             progress?.Report("Fitting the potential model to this save…");
             roles.Potential = PotentialModel.Fit(rows);
@@ -130,11 +171,14 @@ public static class GameLoader
             return new LoadResult
             {
                 Players = rows, Build = game.BuildKey, GameDate = game.GameDate, PeopleInDb = persons.Length,
-                ExcludedWomen = women, Millis = sw.ElapsedMilliseconds, LayoutSource = src, HumanClubs = humans
+                ExcludedWomen = women, Millis = sw.ElapsedMilliseconds, LayoutSource = src, HumanClubs = humans, Staff = staff
             };
         }
     }
 }
+
+
+
 
 
 

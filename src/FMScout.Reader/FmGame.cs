@@ -31,9 +31,14 @@ public sealed record Player(
     ulong ClubAddress,
     int ClubReputation,
     DateOnly? ContractStart,
-    ulong TeamAddress);
+    ulong TeamAddress,
+    int CareerApps,
+    int CareerGoals);
 
 public sealed record ClubInfo(ulong Address, string Name, int Reputation);
+
+public sealed record StaffInfo(ulong Address, uint Uid, string Name, string? FullName, DateOnly? DateOfBirth, string? Nationality,
+    string? Club, string? Competition, string? PreviousClub, int JobCode, long WeeklyWage, DateOnly? ContractExpiry, byte[] Personality, bool IsFemale);
 
 /// <summary>Read-only view of a running FM27 game's database.</summary>
 public sealed class FmGame : IDisposable
@@ -93,6 +98,31 @@ public sealed class FmGame : IDisposable
     }
 
     public bool IsPlayer(ulong person) => _playerShift.ContainsKey(Memory.ReadPtr(person));
+
+    public bool IsStaff(ulong person) => Layout.StaffVtableRva.Value != 0 && Memory.ReadPtr(person) == ModuleBase + (ulong)Layout.StaffVtableRva.Value;
+
+    public StaffInfo ReadStaff(ulong v)
+    {
+        var L = Layout; var P = L.Person;
+        string? first = NameEntry(v, P.FirstNameEntry), last = NameEntry(v, P.LastNameEntry);
+        ulong nation = Memory.ReadPtr(v + (ulong)P.Nation.Value);
+        ulong prev = Memory.ReadPtr(v + (ulong)P.Club.Value);
+        ulong contract = Memory.ReadPtr(v + (ulong)P.Contract.Value);
+        ulong team = contract < 0x10000 ? 0 : Memory.ReadPtr(contract + (ulong)L.Contract.Team.Value);
+        ulong club = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Club.Value);
+        ulong comp = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Competition.Value);
+        return new StaffInfo(v, Memory.Read<uint>(v + (ulong)P.Uid.Value), $"{first} {last}".Trim(), FmString(Memory.ReadPtr(v + (ulong)P.FullName.Value)),
+            ReadDate(v + (ulong)P.DateOfBirth.Value),
+            nation < 0x10000 ? null : FmString(Memory.ReadPtr(nation + (ulong)L.Nation.Name.Value)),
+            club < 0x10000 ? null : FmString(Memory.ReadPtr(club + (ulong)L.Club.Name.Value)),
+            comp < 0x10000 ? null : FmString(Memory.ReadPtr(comp + (ulong)L.Team.CompetitionName.Value)),
+            prev < 0x10000 ? null : FmString(Memory.ReadPtr(prev + (ulong)L.Club.Name.Value)),
+            contract < 0x10000 ? 0 : Memory.Read<byte>(contract + (ulong)L.Contract.Job.Value),
+            contract < 0x10000 ? 0 : Memory.Read<uint>(contract + (ulong)L.Contract.WeeklyWage.Value),
+            contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.ExpiryDate.Value),
+            Memory.ReadBytes(v + (ulong)P.Personality.Value, Math.Max(8, L.PersonalityNames.Length)) ?? [],
+            (Memory.Read<byte>(v + (ulong)P.Flags.Value) >> P.FemaleBit & 1) == 1);
+    }
 
     public ClubInfo? ReadClub(ulong club)
     {
@@ -192,11 +222,22 @@ public sealed class FmGame : IDisposable
             club,
             club < 0x10000 ? 0 : Memory.Read<ushort>(club + (ulong)L.Club.Reputation.Value),
             contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.StartDate.Value),
-            team);
+            team,
+            CareerStat(block, Rel(PL.CareerStats), PL.CareerApps),
+            CareerStat(block, Rel(PL.CareerStats), PL.CareerGoals));
+    }
+
+    int CareerStat(byte[] block, int rel, Hex field)
+    {
+        if (Layout.Player.CareerStats.Value == 0 || rel < 0 || rel + 8 > block.Length) return 0;
+        ulong p = BitConverter.ToUInt64(block, rel);
+        return p < 0x10000 ? 0 : Memory.Read<ushort>(p + (ulong)field.Value);
     }
 
     public void Dispose() => Memory.Dispose();
 }
+
+
 
 
 
