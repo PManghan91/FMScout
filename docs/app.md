@@ -40,6 +40,18 @@
 * All the weights are in `%APPDATA%\FM27Scout\join.json`.
 * **Not included yet:** ambition and loyalty (the personality order isn't mapped), favourite and disliked clubs and people, real transfer and wage budgets, and work permits. FM decides for real only when you approach a player, so treat this as a guide.
 
+### Newgens and bargains
+* **Newgen** column, and the `newgen`, `regen` and `real` query terms. The game gives everyone it creates during the save (youth intakes, plus filler players generated at the start) UIDs from a new block, above the real database's IDs. The app finds that gap automatically: in BRR the real database ends at about 2,000.75M and generated people start at 2,002.04M. Every player born 2011 or later falls in the generated block.
+* **Joined:** the start date of the current contract. For youth-intake kids this is the intake date, so `regen age<=17 joined>=2037` lists the latest intake.
+* **Bargain:**
+  * a free agent, or
+  * a contract ending within 6 months, or
+  * valued at no more than half the median for players of similar CA (5-point band) and age.
+* **Value vs typical** is his value divided by that median.
+* **Value for money** is his best potential role score per £1M of fee plus 2 years' wages. There is no fee for free agents or contracts ending within 6 months, and free agents are assumed to want a typical wage for their CA.
+* **Built-in searches** (★ in the saved-search drop-down): wonderkid newgens, best young newgens we could get, latest youth intakes, bargains we could get, undervalued high potential, value for money we could get, free agents, and contracts ending.
+* **Next youth intake:** this is not in memory beforehand. Nobody aged 14 or under exists, and every 15-year-old already has a club, so FM creates intake players on the day.
+
 ### Clubs tab
 Squads built from the loaded players: player count, average and best CA, average PA, average age, squad value, wage bill and best player. Double-click a club to list its players.
 
@@ -72,5 +84,6 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
 

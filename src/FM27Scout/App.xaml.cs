@@ -32,7 +32,7 @@ public partial class App : Application
         var res = w.SelfTestLoad();
         log.WriteLine($"build {res.Build} date {res.GameDate} people {res.PeopleInDb} players {res.Players.Count} women excluded {res.ExcludedWomen} in {res.Millis} ms");
 
-        foreach (var q in new[] { "", "age<=21 pa>=170", "pos:ST poa>=75", "league:\"Premier League\" value<=20m age<=23", "gk ca>=160", "free pa>=140", "pot.bpcb>=80 age<=20", "haaland", "join>=70 ca>=120", "pos:ST join>=50 ca>=110", "free join>=60 ca>=100", "bad>>query" })
+        foreach (var q in new[] { "", "age<=21 pa>=170", "pos:ST poa>=75", "league:\"Premier League\" value<=20m age<=23", "gk ca>=160", "free pa>=140", "pot.bpcb>=80 age<=20", "haaland", "join>=70 ca>=120", "pos:ST join>=50 ca>=110", "free join>=60 ca>=100", "regen age<=19 pa>=150", "bargain ca>=110 join>=50", "real age<=17", "bad>>query" })
         {
             var r = w.SelfTestQuery(q);
             log.WriteLine($"query [{q}] -> {r}");
@@ -41,6 +41,7 @@ public partial class App : Application
         log.WriteLine(w.SelfTestSample("Lamine Yamal"));
         log.WriteLine(w.SelfTestJoin());
         log.WriteLine(w.SelfTestPotential());
+        log.WriteLine(w.SelfTestRegens());
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
@@ -67,5 +68,7 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
+
 
 

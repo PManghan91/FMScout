@@ -78,3 +78,39 @@ The GK ties left over from Verbruggen (Aerial Reach, Communication and Reflexes 
 
 The 5 leftover indices are the hidden attributes, also named from that order: 41 Dirtiness, 44 Consistency, 47 Important Matches, 48 Injury Proneness, 49 Versatility. They are always multiples of 5 and don't correlate with CA.
 
+
+## Staff (Tue 24/2/2037). Not mapped yet
+FM27 shows staff attributes as **word bands**: Unsuited, Reasonable, Average, Competent, Good, Very Good, Elite.
+
+| | Korey Smith (Asst Mgr) | Byron Anthony (Coach) | Richard Thomas (Scout) | Millie Bombroff (Physio) |
+|---|---|---|---|---|
+| Attacking | Competent | Average | | |
+| Defending | Very Good | Good | | |
+| Fitness | Reasonable | Reasonable | | |
+| Goalkeeping | Unsuited | Unsuited | | |
+| Possession | Competent | Good | | |
+| Set Pieces | Competent | Unsuited | | |
+| Tactical | Good | Very Good | | |
+| Technical | Good | Average | | |
+| Working With Youngsters | Good | Very Good | | |
+| Adaptability | Competent | Average | Good | Good |
+| Authority | Competent | Good | Competent | Average |
+| Determination | Good | Good | Good | Average |
+| Motivating | Very Good | Very Good | Elite | Average |
+| People Management | Good | Average | Average | Competent |
+| Judging Player Ability | Good | Competent | Good | Unsuited |
+| Judging Player Potential | Good | Good | Good | Competent |
+| Judging Staff Ability | Average | Unsuited | Good | Average |
+| Negotiating | Good | Reasonable | Good | Competent |
+| Tactical Knowledge | Average | Competent | Good | Reasonable |
+| Analysing Data | | | Reasonable | |
+| Physiotherapy / Sports Science | | | | Average / Competent |
+
+Staff records (vtable RVA 0x4D8DE78) hold 28 bytes on a 1-20 scale at person+0x150, followed by 24 bytes on a 1-100 scale.
+
+I tested both band orders and required each candidate byte to be ordered the same way as the bands across the four people. That leaves only 8 of the 22 attributes with a candidate, and Tactical Knowledge has none. Possible reasons:
+* the bands are relative (to the job or league level),
+* the staff values live in a sub-object, or
+* this block is something else.
+
+Four people aren't enough to tell. Next step: more staff screenshots, ideally including one with high values (an elite coach).

@@ -66,7 +66,7 @@ public sealed class QueryError(string msg) : Exception(msg);
 ///   age&lt;=21 pa&gt;=150 pos:ST pos:D,DM league:"Premier League" club:arsenal nation:brazil
 ///   value&lt;=20m wage&lt;50k finishing&gt;=15 poa&gt;=70 (role code = role score) pot.poa&gt;=80 best&gt;=75
 ///   contract&lt;=2037 foot:left gk   (bare words match the name)
-///   join&gt;=60 rep&lt;=6000 wrep&gt;=3000 status:"Squad Player" willing:likely
+///   regen bargain valueratio&lt;=0.5   join&gt;=60 rep&lt;=6000 wrep&gt;=3000 status:"Squad Player" willing:likely
 /// </summary>
 public static class FilterBuilder
 {
@@ -131,6 +131,9 @@ public static class FilterBuilder
                 var w = m.Groups["w"].Value.Trim('"');
                 if (w.Equals("gk", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsGoalkeeper); continue; }
                 if (w.Equals("free", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.Source.Club == null); continue; }
+                if (w.Equals("regen", StringComparison.OrdinalIgnoreCase) || w.Equals("newgen", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsRegen); continue; }
+                if (w.Equals("real", StringComparison.OrdinalIgnoreCase)) { res.Add(p => !p.IsRegen); continue; }
+                if (w.Equals("bargain", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsBargain); continue; }
                 res.Add(p => Contains(p.Name, w) || Contains(p.FullName, w) || Contains(p.Source.Name, w));
                 continue;
             }
@@ -168,7 +171,7 @@ public static class FilterBuilder
             "age" => p => p.Age ?? 0, "ca" => p => p.CA, "pa" => p => p.PA, "height" => p => p.Height,
             "value" => p => p.Value, "wage" => p => p.Wage, "best" => p => p.BestRoleScore, "pot" or "potbest" => p => p.BestPotentialScore,
             "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, "join" => p => p.Join,
-            "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
+            "valueratio" or "vr" => p => p.ValueRatio, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
         };
         if (num == null)
         {
@@ -207,5 +210,7 @@ public static class FilterBuilder
     static bool Contains(string? hay, string needle) =>
         hay != null && CultureInfo.InvariantCulture.CompareInfo.IndexOf(hay, needle, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
 }
+
+
 
 
