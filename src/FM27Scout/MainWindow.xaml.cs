@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     List<SavedSearch> _saved = [];
     readonly Dictionary<string, TextBox> _attrBoxes = new();
     readonly List<CheckBox> _posChecks = [];
-    DataGridTextColumn? _roleCol, _rolePotCol;
+    DataGridTextColumn? _roleCol, _rolePotCol, _gainCol;
     bool _suppressSaved;
 
     static readonly string SettingsPath = Path.Combine(AppPaths.Data, "settings.json");
@@ -52,6 +52,8 @@ public partial class MainWindow : Window
         BuildColumns();
         LoadSettings();
         RefreshSaved();
+        AttachContextMenus();
+        RenderCompare();
         QueryBox.TextChanged += (_, _) => QueryHint.Visibility = QueryBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Closing += (_, _) => SaveSettings();
     }
@@ -122,9 +124,12 @@ public partial class MainWindow : Window
             PositionMin = FPosMin.SelectedIndex switch { 0 => 20, 2 => 10, 3 => 5, _ => 15 },
             Role = role is { Code: not "-" } ? role.Code : null, RoleMin = D(FRoleMin), RolePotentialMin = D(FRolePotMin),
             Club = S(FClub), League = S(FLeague), ValueMax = S(FValueMax), WageMax = S(FWageMax), ContractExpiresBy = I(FContract),
-            FreeAgentsOnly = FFree.IsChecked == true, GettableOnly = FGettable.IsChecked == true,
+            FreeAgentsOnly = FFree.IsChecked == true, GettableOnly = FGettable.IsChecked == true, ShortlistOnly = FShortlist.IsChecked == true,
             AttributeMin = _attrBoxes.Where(kv => int.TryParse(kv.Value.Text, out var v) && v > 0).ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value.Text)),
             Query = QueryBox.Text.Trim(),
+            UpgradeForUid = _upgrade?.UpgradeForUid, UpgradeForName = _upgrade?.UpgradeForName, UpgradeMinScore = _upgrade?.UpgradeMinScore ?? 0,
+            UpgradeMinCa = _upgrade?.UpgradeMinCa ?? 0, UpgradeMinPa = _upgrade?.UpgradeMinPa ?? 0, UpgradeClub = _upgrade?.UpgradeClub,
+            UpgradeIncScore = _upgrade?.UpgradeIncScore ?? 0, UpgradeIncPot = _upgrade?.UpgradeIncPot ?? 0, UpgradeIncCa = _upgrade?.UpgradeIncCa ?? 0, UpgradeIncPa = _upgrade?.UpgradeIncPa ?? 0,
         };
     }
 
@@ -139,13 +144,13 @@ public partial class MainWindow : Window
         FRole.SelectedIndex = ri + 1;
         FRoleMin.Text = f.RoleMin?.ToString() ?? ""; FRolePotMin.Text = f.RolePotentialMin?.ToString() ?? "";
         FClub.Text = f.Club ?? ""; FLeague.Text = f.League ?? ""; FValueMax.Text = f.ValueMax ?? ""; FWageMax.Text = f.WageMax ?? "";
-        FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly; FGettable.IsChecked = f.GettableOnly;
+        FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly; FGettable.IsChecked = f.GettableOnly; FShortlist.IsChecked = f.ShortlistOnly;
         foreach (var (k, tb) in _attrBoxes) tb.Text = f.AttributeMin.TryGetValue(k, out var v) ? v.ToString() : "";
         QueryBox.Text = f.Query;
     }
 
     void Apply_Click(object s, RoutedEventArgs e) => ApplyFilters();
-    void Reset_Click(object s, RoutedEventArgs e) { WriteFilter(new FilterState()); ApplyFilters(); }
+    void Reset_Click(object s, RoutedEventArgs e) { _upgrade = null; WriteFilter(new FilterState()); ApplyFilters(); }
     void Query_KeyDown(object s, KeyEventArgs e) { if (e.Key == Key.Enter) ApplyFilters(); }
 
     void ApplyFilters()
@@ -170,9 +175,12 @@ public partial class MainWindow : Window
             p.SelectedPotentialScore = ri >= 0 ? p.PotentialRoleScores[ri] : 0;
         }
 
+        if (_upgrade == null) foreach (var p in _all) { p.Gain = 0; p.GainText = ""; }
         _view = _all.Where(pred).ToList();
+        if (_gainCol != null) _gainCol.Visibility = _upgrade != null ? Visibility.Visible : Visibility.Collapsed;
         SortView();
-        CountText.Text = $"{_view.Count:N0} of {_all.Count:N0} players";
+        CountText.Text = (_upgrade != null ? $"Upgrades for {_upgrade.UpgradeForName} as {FRole.SelectedItem} (his {_upgrade.UpgradeIncScore:F0}/{_upgrade.UpgradeIncPot:F0}): +3 now with higher CA, or under-23 +5 at potential with higher PA · Join ≥ 50 · Reset to clear · " : "")
+                         + $"{_view.Count:N0} of {_all.Count:N0} players";
     }
 
     void Role_Changed(object s, SelectionChangedEventArgs e)
@@ -211,6 +219,7 @@ public partial class MainWindow : Window
         }
 
         Text("name", "Name", "Basics", nameof(PlayerRow.Name), p => p.Name, width: 190);
+        _gainCol = Text("gain", "Gain", "Roles", nameof(PlayerRow.GainText), p => p.Gain, visible: false, width: 110);
         Text("age", "Age", "Basics", nameof(PlayerRow.Age), p => p.Age);
         Text("pos", "Position", "Basics", nameof(PlayerRow.PositionsText), p => p.PositionsText, width: 110);
         Text("club", "Club", "Basics", nameof(PlayerRow.Club), p => p.Club, width: 160);
@@ -467,7 +476,199 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
+    internal string SelfTestUpgrade()
+    {
+        var sb = new System.Text.StringBuilder();
+        var squad = ((SquadGrid.ItemsSource as List<PlayerRow>) ?? []).Where(p => p.TeamName == "First team").ToList();
+        sb.AppendLine($"Squad: {squad.Count} players; top: " + string.Join(", ", squad.Take(5).Select(p => $"{p.Name} ({p.PositionsText}, CA {p.CA}, {p.BestRole} {p.BestRoleScore:F0})")));
+        foreach (var p in squad.Take(3))
+        {
+            int ri = Array.IndexOf(p.RoleScores, p.RoleScores.Max());
+            FindUpgrade(p, ri);
+            sb.AppendLine($"  upgrade for {p.Name} as {_roles.Roles[ri].Name} ({p.RoleScores[ri]:F0}): {_view.Count} found; top: " +
+                string.Join(", ", _view.Take(3).Select(u => $"{u.Name} ({u.Age}, {u.Club}, CA {u.CA}/PA {u.PA}) {u.RoleScores[ri]:F0}/{u.PotentialRoleScores[ri]:F0} {u.GainText}, join {u.Join:F0}")));
+            if (_compare.Count < 4) { _compare.Add(p); if (_view.Count > 0) _compare.Add(_view[0]); }
+        }
+        RenderCompare();
+        _upgrade = null; WriteFilter(new FilterState()); ApplyFilters();
+        return sb.ToString();
+    }
+
+    internal void SelectTab(int i) => Tabs.SelectedIndex = i;
+
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; ShowProfile(_view[i]); } }
+
+    // ------------------------------------------------------------------ squad, comparison, upgrades
+    FilterState? _upgrade;
+    readonly List<PlayerRow> _compare = [];
+    const double UpgradeMargin = 3;
+
+    bool _suppressSquad;
+    void BuildSquad()
+    {
+        _suppressSquad = true;
+        var my = MyClubCombo.SelectedItem as MyClub;
+        if (SquadClubCombo.ItemsSource == null || !ReferenceEquals(SquadClubCombo.ItemsSource, _myClubs)) SquadClubCombo.ItemsSource = _myClubs;
+        if (SquadClubCombo.SelectedItem == null || SquadClubCombo.SelectedItem is MyClub s && !_myClubs.Contains(s)) SquadClubCombo.SelectedItem = my;
+        _suppressSquad = false;
+        ShowSquad();
+    }
+
+    void SquadClub_Changed(object sender, SelectionChangedEventArgs e) { if (!_suppressSquad) ShowSquad(); }
+    void SquadAll_Click(object sender, RoutedEventArgs e) => ShowSquad();
+
+    void ShowSquad()
+    {
+        if (SquadClubCombo.SelectedItem is not MyClub club) { SquadGrid.ItemsSource = null; return; }
+        var players = _all.Where(p => p.Club == club.Name).ToList();
+        // first team = the club's team with the highest average CA; others are reserves / youth
+        var teams = players.GroupBy(p => p.Source.TeamAddress).Select(g => (team: g.Key, avg: g.Average(p => p.CA), league: g.First().League)).OrderByDescending(t => t.avg).ToList();
+        ulong first = teams.Count > 0 ? teams[0].team : 0;
+        foreach (var p in players) p.TeamName = p.Source.TeamAddress == first ? "First team" : $"Reserves/youth ({p.League})";
+        var list = players.Where(p => SquadAllTeams.IsChecked == true || p.Source.TeamAddress == first)
+            .OrderBy(p => p.Source.TeamAddress == first ? 0 : 1).ThenByDescending(p => p.BestRoleScore).ToList();
+        SquadGrid.ItemsSource = list;
+        SquadTitle.Text = $"{list.Count} players · reputation {club.Reputation:N0} · top wage {MoneyText.Format(club.TopWage)} p/w" + (club.Name == (MyClubCombo.SelectedItem as MyClub)?.Name ? " · your club" : "");
+    }
+
+    void ShowInPlayers(PlayerRow p)
+    {
+        _upgrade = null;
+        WriteFilter(new FilterState { Query = $"uid={p.Uid}" });
+        Tabs.SelectedIndex = 0;
+        ApplyFilters();
+        PlayerGrid.SelectedIndex = 0;
+        ShowProfile(p);
+    }
+
+    void SquadGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (SquadGrid.SelectedItem is PlayerRow p) ShowInPlayers(p); }
+    void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (PlayerGrid.SelectedItem is PlayerRow p) { Tabs.SelectedIndex = 0; ShowProfile(p); } }
+
+    void SquadGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SquadGrid.SelectedItem is PlayerRow p) ShowProfile(p);
+    }
+
+    void AttachContextMenus()
+    {
+        foreach (var grid in new[] { PlayerGrid, SquadGrid })
+        {
+            var g = grid;
+            g.PreviewMouseRightButtonDown += (s, e) =>
+            {
+                var row = ItemsControl.ContainerFromElement(g, (DependencyObject)e.OriginalSource) as DataGridRow;
+                if (row == null) return;
+                row.IsSelected = true;
+                g.ContextMenu = BuildRowMenu((PlayerRow)row.Item);
+            };
+        }
+    }
+
+    ContextMenu BuildRowMenu(PlayerRow p)
+    {
+        var menu = new ContextMenu();
+        var cmp = new MenuItem { Header = _compare.Contains(p) ? "Remove from comparison" : "Add to comparison" };
+        cmp.Click += (_, _) => { if (!_compare.Remove(p)) { if (_compare.Count >= 4) _compare.RemoveAt(0); _compare.Add(p); } RenderCompare(); StatusText.Text = $"Comparison ({_compare.Count}/4): {string.Join(", ", _compare.Select(x => x.Name))}"; };
+        menu.Items.Add(cmp);
+        var sl = new MenuItem { Header = Shortlist.Contains(p.Uid) ? "Remove from shortlist" : "Add to shortlist" };
+        sl.Click += (_, _) => { Shortlist.Toggle(p.Uid); StatusText.Text = $"Shortlist: {Shortlist.Count} players (sidebar › Shortlist only, or query: shortlist)"; };
+        menu.Items.Add(sl);
+        var open = new MenuItem { Header = "Open comparison" };
+        open.Click += (_, _) => { RenderCompare(); Tabs.SelectedIndex = 2; };
+        var prof = new MenuItem { Header = "Open profile" };
+        prof.Click += (_, _) => ShowInPlayers(p);
+        menu.Items.Add(prof);
+        menu.Items.Add(open);
+        menu.Items.Add(new Separator());
+
+        var up = new MenuItem { Header = "Find upgrade" };
+        foreach (var (r, i) in _roles.Roles.Select((r, i) => (r, i)).OrderByDescending(t => p.RoleScores[t.i]).Take(5))
+        {
+            int ri = i;
+            var mi = new MenuItem { Header = $"as {r.Name}  (his score {p.RoleScores[i]:F0})" };
+            mi.Click += (_, _) => FindUpgrade(p, ri);
+            up.Items.Add(mi);
+        }
+        menu.Items.Add(up);
+        return menu;
+    }
+
+    void FindUpgrade(PlayerRow p, int roleIndex)
+    {
+        var role = _roles.Roles[roleIndex];
+        var my = MyClubCombo.SelectedItem as MyClub;
+        _upgrade = new FilterState
+        {
+            UpgradeForUid = p.Uid, UpgradeForName = p.Name, UpgradeMinScore = Math.Round(p.RoleScores[roleIndex] + UpgradeMargin),
+            UpgradeMinCa = p.CA, UpgradeMinPa = p.PA, UpgradeClub = my?.Name,
+            UpgradeIncScore = p.RoleScores[roleIndex], UpgradeIncPot = p.PotentialRoleScores[roleIndex], UpgradeIncCa = p.CA, UpgradeIncPa = p.PA,
+        };
+        WriteFilter(new FilterState { Role = role.Code });
+        Tabs.SelectedIndex = 0;
+        ApplyFilters();
+        _sortCol = _cols.First(c => c.Key == "gain"); _sortDir = ListSortDirection.Descending; SortView();
+        StatusText.Text = _view.Count == 0
+            ? $"No realistic upgrade for {p.Name} as {role.Name} right now (nobody better who would also join you)."
+            : $"{_view.Count} realistic upgrades for {p.Name} as {role.Name}. Pick another role via right-click › Find upgrade, or change the Role in the sidebar.";
+    }
+
+    void ClearCompare_Click(object sender, RoutedEventArgs e) { _compare.Clear(); RenderCompare(); }
+
+    void RenderCompare()
+    {
+        CompareGrid.Children.Clear(); CompareGrid.RowDefinitions.Clear(); CompareGrid.ColumnDefinitions.Clear();
+        if (_compare.Count == 0)
+        {
+            CompareGrid.Children.Add(new TextBlock { Text = "Nothing to compare yet. Right-click players and choose Add to comparison.", Foreground = (Brush)FindResource("Muted") });
+            return;
+        }
+        CompareGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
+        foreach (var _ in _compare) CompareGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        int row = 0;
+        void Row(string label, Func<PlayerRow, string> text, Func<PlayerRow, double>? score = null, bool header = false, bool higherIsBetter = true)
+        {
+            CompareGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var l = new TextBlock { Text = label, Foreground = header ? (Brush)FindResource("Fg") : (Brush)FindResource("Muted"), FontWeight = header ? FontWeights.Bold : FontWeights.Normal, Margin = new Thickness(0, header ? 10 : 1, 8, 1) };
+            Grid.SetRow(l, row); CompareGrid.Children.Add(l);
+            double best = score == null ? double.NaN : (higherIsBetter ? _compare.Max(score) : _compare.Min(score));
+            for (int i = 0; i < _compare.Count; i++)
+            {
+                var p = _compare[i];
+                bool isBest = score != null && _compare.Count > 1 && score(p) == best;
+                var t = new TextBlock { Text = text(p), Margin = new Thickness(0, header ? 10 : 1, 8, 1), FontWeight = header || isBest ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = isBest ? AttrBrush.Top : (Brush)FindResource("Fg"), TextTrimming = TextTrimming.CharacterEllipsis };
+                Grid.SetRow(t, row); Grid.SetColumn(t, i + 1); CompareGrid.Children.Add(t);
+            }
+            row++;
+        }
+        Row("", p => p.Name, header: true);
+        Row("Club", p => p.Club);
+        Row("Age", p => p.Age?.ToString() ?? "", p => -(p.Age ?? 99));
+        Row("Position", p => p.PositionsText);
+        Row("CA", p => p.CA.ToString(), p => p.CA);
+        Row("PA", p => p.PA.ToString(), p => p.PA);
+        Row("Best role", p => p.BestRole);
+        Row("Best score / pot.", p => $"{p.BestRoleScore:F0} / {p.BestPotentialScore:F0}", p => p.BestRoleScore);
+        Row("Value", p => p.ValueText, p => -p.Value);
+        Row("Wage", p => p.WageText, p => -p.Wage);
+        Row("Expires", p => p.ContractExpiry?.ToString("dd/MM/yyyy") ?? "-");
+        Row("Join %", p => p.Join < 0 ? "ours" : $"{p.Join:F0} ({p.JoinLabel})", p => p.Join);
+        Row("Height", p => $"{p.Height} cm", p => p.Height);
+        bool anyGk = _compare.Any(p => p.IsGoalkeeper);
+        foreach (var (title, names) in new[] { ("Technical", anyGk && _compare.All(p => p.IsGoalkeeper) ? Attr.Goalkeeping : Attr.Technical), ("Mental", Attr.Mental), ("Physical", Attr.Physical), ("Hidden", Attr.Hidden) })
+        {
+            Row(title, _ => "", header: true);
+            foreach (var n in names)
+            {
+                int ai = Attr.Index(n); if (ai < 0) continue;
+                bool lowerBetter = n is "Dirtiness" or "InjuryProneness";
+                Row(Attr.Pretty(n), p => p.A[ai].ToString(), p => p.A[ai], higherIsBetter: !lowerBetter);
+            }
+        }
+        Row("Role scores", _ => "", header: true);
+        var roleIdx = _compare.SelectMany(p => _roles.Roles.Select((r, i) => (i, s: p.RoleScores[i]))).GroupBy(t => t.i).OrderByDescending(g => g.Max(t => t.s)).Take(8).Select(g => g.Key);
+        foreach (var ri in roleIdx) Row(_roles.Roles[ri].Name, p => $"{p.RoleScores[ri]:F0} / {p.PotentialRoleScores[ri]:F0}", p => p.RoleScores[ri]);
+    }
 
     // ------------------------------------------------------------------ my club / join estimate
     string? _savedMyClub;
@@ -485,6 +686,7 @@ public partial class MainWindow : Window
         MyClubCombo.SelectedItem = pick;
         _suppressMyClub = false;
         EvaluateJoin();
+        BuildSquad();
     }
 
     bool _suppressMyClub;
@@ -493,6 +695,7 @@ public partial class MainWindow : Window
         if (_suppressMyClub || MyClubCombo.SelectedItem is not MyClub) return;
         _savedMyClub = ((MyClub)MyClubCombo.SelectedItem).Name;
         EvaluateJoin();
+        BuildSquad();
         ApplyFilters();
         if (PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
     }
@@ -755,6 +958,9 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
+
+
 
 
 

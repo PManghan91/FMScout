@@ -30,7 +30,8 @@ public sealed record Player(
     int SquadStatus,
     ulong ClubAddress,
     int ClubReputation,
-    DateOnly? ContractStart);
+    DateOnly? ContractStart,
+    ulong TeamAddress);
 
 public sealed record ClubInfo(ulong Address, string Name, int Reputation);
 
@@ -190,11 +191,13 @@ public sealed class FmGame : IDisposable
             contract < 0x10000 ? 0 : Memory.Read<byte>(contract + (ulong)L.Contract.SquadStatus.Value),
             club,
             club < 0x10000 ? 0 : Memory.Read<ushort>(club + (ulong)L.Club.Reputation.Value),
-            contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.StartDate.Value));
+            contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.StartDate.Value),
+            team);
     }
 
     public void Dispose() => Memory.Dispose();
 }
+
 
 
 

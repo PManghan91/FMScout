@@ -34,6 +34,19 @@ public sealed class FilterState
     public double GettableMin { get; set; } = 50;
 
     public Dictionary<string, int> AttributeMin { get; set; } = new();
+
+    /// <summary>"Find upgrade": only players better than this one in Role, who beat him on CA or PA and would join.</summary>
+    public uint? UpgradeForUid { get; set; }
+    public string? UpgradeForName { get; set; }
+    public double UpgradeMinScore { get; set; }
+    public int UpgradeMinCa { get; set; }
+    public int UpgradeMinPa { get; set; }
+    public double UpgradeIncScore { get; set; }
+    public double UpgradeIncPot { get; set; }
+    public int UpgradeIncCa { get; set; }
+    public int UpgradeIncPa { get; set; }
+    public bool ShortlistOnly { get; set; }
+    public string? UpgradeClub { get; set; }
     public string Query { get; set; } = "";
 }
 
@@ -107,6 +120,7 @@ public static class FilterBuilder
         if (Has(f.WageMax)) { var v = Money(f.WageMax!); preds.Add(p => p.Wage <= v); }
         if (f.ContractExpiresBy is int y) preds.Add(p => p.ContractExpiry is { } d && d.Year <= y);
         if (f.FreeAgentsOnly) preds.Add(p => p.Source.Club == null);
+        if (f.ShortlistOnly) preds.Add(p => Shortlist.Contains(p.Uid));
         if (f.GettableOnly) { var gm = f.GettableMin; preds.Add(p => p.Join >= gm); }
 
         foreach (var (name, min) in f.AttributeMin)
@@ -115,6 +129,11 @@ public static class FilterBuilder
             if (i >= 0 && min > 0) preds.Add(p => p.A[i] >= min);
         }
 
+        if (f.UpgradeForUid != null && Has(f.Role) && roles.IndexOf(f.Role!) is int ur && ur >= 0)
+        {
+            var club = f.UpgradeClub; double inc = f.UpgradeIncScore, incPot = f.UpgradeIncPot; int ca = f.UpgradeIncCa, pa = f.UpgradeIncPa;
+            preds.Add(p => p.Uid != f.UpgradeForUid && p.Club != club && p.Join >= 50 && Upgrade.Qualifies(p, ur, inc, incPot, ca, pa));
+        }
         if (Has(f.Query)) preds.AddRange(ParseQuery(f.Query, roles));
         return p => { foreach (var pr in preds) if (!pr(p)) return false; return true; };
     }
@@ -134,6 +153,7 @@ public static class FilterBuilder
                 if (w.Equals("regen", StringComparison.OrdinalIgnoreCase) || w.Equals("newgen", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsRegen); continue; }
                 if (w.Equals("real", StringComparison.OrdinalIgnoreCase)) { res.Add(p => !p.IsRegen); continue; }
                 if (w.Equals("bargain", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsBargain); continue; }
+                if (w.Equals("shortlist", StringComparison.OrdinalIgnoreCase)) { res.Add(p => Shortlist.Contains(p.Uid)); continue; }
                 res.Add(p => Contains(p.Name, w) || Contains(p.FullName, w) || Contains(p.Source.Name, w));
                 continue;
             }
@@ -171,7 +191,7 @@ public static class FilterBuilder
             "age" => p => p.Age ?? 0, "ca" => p => p.CA, "pa" => p => p.PA, "height" => p => p.Height,
             "value" => p => p.Value, "wage" => p => p.Wage, "best" => p => p.BestRoleScore, "pot" or "potbest" => p => p.BestPotentialScore,
             "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, "join" => p => p.Join,
-            "valueratio" or "vr" => p => p.ValueRatio, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
+            "valueratio" or "vr" => p => p.ValueRatio, "uid" => p => p.Uid, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
         };
         if (num == null)
         {
@@ -214,3 +234,32 @@ public static class FilterBuilder
 
 
 
+
+
+/// <summary>Upgrade rule: better now (+3, higher CA) or, for under-23s, better at potential (+5, higher PA) without being much worse now.</summary>
+public static class Upgrade
+{
+    public const double NowMargin = 3, PotMargin = 5, YoungMaxDrop = 3; public const int YoungAge = 23;
+
+    public static bool Qualifies(PlayerRow p, int ri, double inc, double incPot, int incCa, int incPa)
+    {
+        double now = p.RoleScores[ri], pot = p.PotentialRoleScores[ri];
+        bool better = now >= inc + NowMargin && p.CA > incCa;
+        bool young = p.Age < YoungAge && pot >= incPot + PotMargin && now >= inc - YoungMaxDrop && p.PA > incPa;
+        if (better) { p.Gain = now - inc; p.GainText = $"+{now - inc:F0} now"; }
+        else if (young) { p.Gain = pot - incPot; p.GainText = $"+{pot - incPot:F0} at potential"; }
+        return better || young;
+    }
+}
+
+/// <summary>Persisted shortlist of player UIDs.</summary>
+public static class Shortlist
+{
+    static string FilePath => Path.Combine(AppPaths.Data, "shortlist.json");
+    static HashSet<uint>? _ids;
+    static HashSet<uint> Ids => _ids ??= Load();
+    static HashSet<uint> Load() { try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<HashSet<uint>>(File.ReadAllText(FilePath)) ?? [] : []; } catch { return []; } }
+    public static bool Contains(uint uid) => Ids.Contains(uid);
+    public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); File.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
+    public static int Count => Ids.Count;
+}

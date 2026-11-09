@@ -101,6 +101,7 @@
                                             <Label Content="Max wage per week (e.g. 80k)"/><TextBox x:Name="FWageMax"/>
                                             <Label Content="Contract expires by (year)"/><TextBox x:Name="FContract"/>
                                             <CheckBox x:Name="FFree" Content="Free agents only" Margin="0,8,0,0"/>
+                                            <CheckBox x:Name="FShortlist" Content="Shortlist only" Margin="0,4,0,0"/>
                                             <CheckBox x:Name="FGettable" Content="Gettable for us (Join ≥ 50)" Margin="0,4,0,0"
                                                       ToolTip="Only players the Join estimate rates Possible or Likely for your club."/>
                                         </StackPanel>
@@ -114,7 +115,7 @@
                         </DockPanel>
                     </Border>
 
-                    <DataGrid x:Name="PlayerGrid" Grid.Column="1" Sorting="Grid_Sorting" SelectionChanged="Grid_SelectionChanged"
+                    <DataGrid x:Name="PlayerGrid" Grid.Column="1" Sorting="Grid_Sorting" SelectionChanged="Grid_SelectionChanged" MouseDoubleClick="PlayerGrid_DoubleClick"
                               FrozenColumnCount="1" CanUserSortColumns="True"/>
 
                     <!-- Profile -->
@@ -126,6 +127,52 @@
                         </ScrollViewer>
                     </Border>
                 </Grid>
+            </TabItem>
+
+            <TabItem Header="Squad">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Club" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="SquadClubCombo" Width="220" SelectionChanged="SquadClub_Changed" IsTextSearchEnabled="True"/>
+                            <CheckBox x:Name="SquadAllTeams" Content="Include reserves &amp; youth" Margin="14,0,0,0" VerticalAlignment="Center" Click="SquadAll_Click"/>
+                            <TextBlock x:Name="SquadTitle" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="   ·   right-click: compare / find upgrade / shortlist · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="SquadGrid" SelectionChanged="SquadGrid_SelectionChanged" MouseDoubleClick="SquadGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="Team" Binding="{Binding TeamName}" Width="150"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
+                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
+                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="170"/>
+                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding SquadStatusName}" Width="130"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Compare">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Comparison" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="   (right-click any player › Add to comparison; best value per row is highlighted)" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <Button Content="Clear" Margin="16,0,0,0" Click="ClearCompare_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <Grid x:Name="CompareGrid" Margin="12"/>
+                    </ScrollViewer>
+                </DockPanel>
             </TabItem>
 
             <TabItem Header="Clubs">
@@ -161,5 +208,7 @@
         </TabControl>
     </DockPanel>
 </Window>
+
+
 
 

@@ -52,6 +52,28 @@
 * **Built-in searches** (★ in the saved-search drop-down): wonderkid newgens, best young newgens we could get, latest youth intakes, bargains we could get, undervalued high potential, value for money we could get, free agents, and contracts ending.
 * **Next youth intake:** this is not in memory beforehand. Nobody aged 14 or under exists, and every 15-year-old already has a club, so FM creates intake players on the day.
 
+### Squad tab
+* Pick any club (it defaults to yours). By default it shows the first team, which is the club's team with the highest average CA. Tick **Include reserves & youth** to add the other teams.
+* Columns: team, age, position, CA, PA, best role with score and potential, squad status, wage, expiry and value.
+* Right-click a player for these options: Add to / Remove from comparison, Add to shortlist, Open profile, and **Find upgrade ›** (pick one of his top 5 roles). Double-click opens the profile.
+
+### Compare tab
+* Shows up to 4 players side by side: key facts, Join %, every attribute (hidden ones included), and the top role scores now and at potential.
+* The best value in each row is highlighted. For Dirtiness and Injury Proneness, lower counts as best.
+
+### Find upgrade
+A player only appears if **all** of these are true:
+* He would really improve the role, in one of two ways:
+  * he scores **at least 3 more** in the chosen role now and has **higher CA**, or
+  * he is **under 23**, scores **at least 5 more at potential**, is **no more than 3 below** now, and has **higher PA**.
+* He would realistically join: **Join ≥ 50** (Possible or Likely) for your club. That estimate already includes the wage and fee affordability factors.
+* He isn't already at your club.
+
+Results open in the Players tab with a **Gain** column (e.g. "+6 now" or "+9 at potential"), sorted by Gain. The sidebar Role is set to that role, so the role score columns are shown, and the profile lists the Join reasons. **Reset** clears it.
+
+### Shortlist
+Add players with right-click › Add to shortlist. Filter with the sidebar's **Shortlist only** box or the query `shortlist`. It is saved in `%APPDATA%\FM27Scout\shortlist.json`.
+
 ### Clubs tab
 Squads built from the loaded players: player count, average and best CA, average PA, average age, squad value, wage bill and best player. Double-click a club to list its players.
 
@@ -84,6 +106,7 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
 
 

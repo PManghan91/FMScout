@@ -44,6 +44,12 @@ public sealed class PlayerRow
     public bool IsBargain => BargainText.Length > 0;
     /// <summary>Value for money: best potential role score per £1M of (fee + 2 years of wages); fee is 0 for free agents / contracts ending ≤ 6 months.</summary>
     public double Vfm { get; set; }
+    /// <summary>Upgrade view: role score gain over the incumbent (now, or at potential for young players).</summary>
+    public double Gain { get; set; }
+    public string GainText { get; set; } = "";
+    public string TeamName { get; set; } = "";
+    public string WageText => Wage > 0 ? MoneyText.Format(Wage) : "-";
+    public string ValueText => Value > 0 ? MoneyText.Format(Value) : "-";
 
     /// <summary>"Would join" estimate 0-100 for the selected club (-1 = already ours).</summary>
     public double Join { get; set; }
@@ -101,6 +107,8 @@ public static class Attr
     public static readonly string[] Goalkeeping = ["AerialReach", "CommandOfArea", "Communication", "Eccentricity", "FirstTouch", "Handling", "Kicking", "OneOnOnes", "Passing", "Punching", "Reflexes", "RushingOut", "Throwing"];
     public static readonly string[] Hidden = ["Consistency", "Dirtiness", "ImportantMatches", "InjuryProneness", "Versatility"];
 }
+
+
 
 
 

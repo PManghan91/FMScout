@@ -42,18 +42,27 @@ public partial class App : Application
         log.WriteLine(w.SelfTestJoin());
         log.WriteLine(w.SelfTestPotential());
         log.WriteLine(w.SelfTestRegens());
+        log.WriteLine(w.SelfTestUpgrade());
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
-        Render(w, Path.Combine(outDir, "selftest-players.png"));
+        Render(w, Path.Combine(outDir, "selftest-players.png"), 0);
+        Render(w, Path.Combine(outDir, "selftest-squad.png"), 1);
+        Render(w, Path.Combine(outDir, "selftest-compare.png"), 2);
         File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString());
     }
 
-    static void Render(Window w, string path)
+    static System.Windows.Controls.Border? _host;
+    static void Render(MainWindow w, string path, int tab)
     {
-        var root = (FrameworkElement)w.Content;
-        w.Content = null;
-        var host = new System.Windows.Controls.Border { Background = w.Background, Child = root };
+        if (_host == null)
+        {
+            var root = (FrameworkElement)w.Content;
+            w.Content = null;
+            _host = new System.Windows.Controls.Border { Background = w.Background, Child = root };
+        }
+        var host = _host;
+        w.SelectTab(tab);
         var size = new Size(1600, 900);
         for (int i = 0; i < 4; i++)
         {
@@ -68,6 +77,9 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
+
+
 
 
 
