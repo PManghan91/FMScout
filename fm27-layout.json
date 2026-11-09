@@ -35,7 +35,7 @@
         "personality": "0x70",     // 8 bytes, 1-20 (hidden personality attributes; order unconfirmed)
         "birthCity": "0x80",       // City* (city +0x18 = name)
         "dateOfBirth": "0x88",     // u16 day-of-year (1-based), u16 year
-        "club": "0x108",           // a Club* that is NOT the current club (Haaland->Man City, Yamal->Barcelona Atletic); meaning unknown
+        "club": "0x108",           // PREVIOUS club (staff: Reiziger->Hannover, Wright->Man City, Vukcevic->Buducnost per their history). Current club = contract chain.
         "contract": "0xA8",        // Contract* for the current club (null if none)
         "flags": "0x19",           // flag byte
         "femaleBit": 4             // bit set = female (100% of women's-league players, 0.2% elsewhere)
@@ -85,6 +85,7 @@
     }
   }
 }
+
 
 
 

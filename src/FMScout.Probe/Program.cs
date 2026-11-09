@@ -12,6 +12,29 @@ if (args.Length > 0 && args[0] == "poscands")
     foreach (var p in gk) Console.WriteLine($"GK {p.Name,-28} CA {p.CurrentAbility} {p.Club} AR {p.Attributes[12]} Com {p.Attributes[14]} Ref {p.Attributes[21]} Kick {p.Attributes[15]} Thr {p.Attributes[16]}");
     return;
 }
+if (args.Length > 0 && args[0] == "staffsolve") { using var g = FmGame.Attach(Report.FindLayout()); StaffSolve.Run(g); return; }
+if (args.Length > 0 && args[0] == "staffpick")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var gp = m2.Module("game_plugin.dll")!.Value; ulong vt = gp.Base + 0x4D8DE78;
+    string Club(ulong v) { ulong c = m2.ReadPtr(v + 0x108); return c < 0x10000 ? "" : g.FmString(m2.ReadPtr(c + 0xC0)) ?? ""; }
+    var staff = g.PersonPointers().Where(v => m2.ReadPtr(v) == vt).Select(v => (v, b: m2.ReadBytes(v + 0x150, 52)!, club: Club(v)))
+        .Where(t => t.b != null && t.club.Length > 0).ToList();
+    // greedy: pick people who set new extremes (max or min) on the most bytes
+    var picked = new List<(ulong v, byte[] b, string club)>();
+    var lo = Enumerable.Repeat(255, 52).ToArray(); var hi = new int[52];
+    for (int k = 0; k < 6; k++)
+    {
+        var best = staff.Where(s => !picked.Contains(s)).MaxBy(s => Enumerable.Range(0, 52).Sum(i => Math.Max(0, s.b[i] - hi[i]) + Math.Max(0, lo[i] - s.b[i])));
+        picked.Add(best);
+        for (int i = 0; i < 52; i++) { hi[i] = Math.Max(hi[i], best.b[i]); lo[i] = Math.Min(lo[i], best.b[i]); }
+    }
+    foreach (var s in picked) Console.WriteLine($"{Analysis.Name(m2, s.v)} | {s.club} | dob {Analysis.FmDate(m2, s.v + 0x88):yyyy} | sum1-20 {s.b.Take(28).Sum(x => x)} | {string.Join(" ", s.b)}");
+    Console.WriteLine("--- highest totals at well-known clubs:");
+    foreach (var s in staff.Where(s => new[] { "Manchester City", "Real Madrid C.F.", "F.C. Barcelona", "Liverpool", "Arsenal", "FC Bayern München", "Chelsea", "Paris Saint-Germain" }.Contains(s.club)).OrderByDescending(s => s.b.Take(28).Sum(x => x)).Take(8))
+        Console.WriteLine($"{Analysis.Name(m2, s.v)} | {s.club} | sum {s.b.Take(28).Sum(x => x)}");
+    return;
+}
 if (args.Length > 0 && args[0] == "status")
 {
     using var g = FmGame.Attach(Report.FindLayout());
@@ -348,6 +371,8 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
 
 
 

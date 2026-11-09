@@ -114,3 +114,21 @@ I tested both band orders and required each candidate byte to be ordered the sam
 * this block is something else.
 
 Four people aren't enough to tell. Next step: more staff screenshots, ideally including one with high values (an elite coach).
+
+## Staff, second batch (Sun 1/3/2037): Vukčević, Castañares, Reiziger, Wright
+The bands seen so far, in order: Unsuited < Reasonable < Average < Competent < Good < Very Good < Outstanding < Elite.
+
+| | Vukčević (Fitness Coach, Montenegro U19) | Castañares (Asst Mgr, Albion reserves) | Reiziger (Manager, Fortuna Düsseldorf) | Wright (Asst Mgr, Man Utd U21) |
+|---|---|---|---|---|
+| Attacking / Defending / Fitness | Competent / Competent / Very Good | Average / Average / Reasonable | Good / Very Good / Reasonable | Competent / Good / Unsuited |
+| Goalkeeping / Possession / Set Pieces | Unsuited / Competent / Unsuited | Reasonable / Reasonable / Reasonable | Unsuited / Good / Competent | Unsuited / Competent / Competent |
+| Tactical / Technical / WWY | Competent / Good / Good | Average / Competent / Reasonable | Good / Good / Very Good | Good / Average / Outstanding |
+| Adapt / Auth / Det / Mot / PM | Avg / Avg / Comp / Avg / Reas | Good / Good / Good / Good / Avg | Good / Good / Good / Comp / Good | Reas / VG / Good / Good / Comp |
+| JPA / JPP / JSA / Neg / TK | Avg / Comp / Reas / Reas / Comp | Reas / Avg / Uns / Reas / Avg | Good / Good / Good / Comp / Good | Avg / Avg / Comp / Reas / Good |
+| Analysing Data / Physio / Sports Sci | Reas / Reas / Uns | | | |
+
+**Findings**
+* For staff, person+0x108 is the **previous** club. That's why I named the wrong clubs. The current club comes from the contract, as for players: person+0xA8 → +0x10 team → +0x30 club. This is verified for Reiziger, Wright and Castañares. Vukčević's job is with the Montenegro national team, and that isn't a club contract.
+* **No single stored byte matches the bands.** I tested every byte in ±0x400 of the record and every block reachable through one or two pointers from it (`FMScout.Probe staffsolve`). For each attribute I required its value to rise with the band across all 8 people, and no source satisfies more than 5 of the 22 attributes. The 28 + 24 bytes at person+0x150 are not the displayed attributes.
+* Working theory: FM27's bands are **relative**, for example to the job's or the club's level, or derived from several values, rather than fixed cut-offs on one stored value.
+* Next: test the relative hypothesis before asking for more screenshots.
