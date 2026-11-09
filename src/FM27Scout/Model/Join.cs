@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace FM27Scout.Model;
 
 /// <summary>The club the user manages, plus squad figures used as an affordability proxy.</summary>
-public sealed record MyClub(string Name, int Reputation, long TopWage, long SquadValue, int Players)
+public sealed record MyClub(string Name, int Reputation, long TopWage, long SquadValue, int Players, string? Nation = null)
 {
     public override string ToString() => Name;
 }
@@ -28,6 +28,8 @@ public sealed class JoinModel
     public WageRules Wage { get; set; } = new();
     public FeeRules Fee { get; set; } = new();
     public PersonalityRules Personality { get; set; } = new();
+    public double FavouredClub { get; set; } = 15;
+    public double WorkPermitUnlikely { get; set; } = -25;
     public JsonElement[] Labels { get; set; } = [];
     public string? SourcePath { get; private set; }
     List<(double min, string text)> _labels = [];
@@ -93,6 +95,12 @@ public sealed class JoinModel
             s += lp; reasons.Add($"{Pts(lp)} Loyal to his club (loyalty {p.Loyalty})");
         }
 
+        // favoured club (FM relationship list)
+        if (p.Source.FavouredClubs.Contains(my.Name)) { s += FavouredClub; reasons.Add($"{Pts(FavouredClub)} {my.Name} is one of his favoured clubs"); }
+
+        // work permit (estimate)
+        if (p.WpText.EndsWith("unlikely")) { s += WorkPermitUnlikely; reasons.Add($"{Pts(WorkPermitUnlikely)} Work permit unlikely ({p.WpDetail})"); }
+
         // contract
         if (p.Source.Club == null) { s += Contract.FreeAgent; reasons.Add($"{Pts(Contract.FreeAgent)} Free agent"); }
         else if (p.ContractExpiry is { } exp)
@@ -122,7 +130,7 @@ public sealed class JoinModel
             s += Fee.Points; reasons.Add($"{Pts(Fee.Points)} Value {MoneyText.Format(p.Value)} is large vs your squad value {MoneyText.Format(my.SquadValue)}");
         }
 
-        reasons.Add("Not included: favourite/disliked clubs, real budgets, work permits (not decoded yet).");
+        reasons.Add("Not included: disliked clubs/people, real budgets (not decoded yet).");
         p.Join = Math.Clamp(s, 0, 100);
         p.JoinLabel = LabelFor(p.Join);
         p.JoinReasons = reasons;
@@ -130,4 +138,5 @@ public sealed class JoinModel
 
     static string Pts(double v) => v >= 0 ? $"+{v:0}" : $"{v:0}";
 }
+
 

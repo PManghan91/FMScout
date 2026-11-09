@@ -42,6 +42,7 @@ public partial class App : Application
         log.WriteLine(w.SelfTestJoin());
         log.WriteLine(w.SelfTestPotential());
         log.WriteLine(w.SelfTestRegens());
+        log.WriteLine(w.SelfTestWp());
         log.WriteLine(w.SelfTestUpgrade());
         log.WriteLine(w.SelfTestQa());
 
@@ -113,6 +114,7 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
 
 
 

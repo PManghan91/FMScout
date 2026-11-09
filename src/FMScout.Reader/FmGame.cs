@@ -33,7 +33,10 @@ public sealed record Player(
     DateOnly? ContractStart,
     ulong TeamAddress,
     int CareerApps,
-    int CareerGoals);
+    int CareerGoals,
+    string[] OtherNationalities,
+    string[] FavouredClubs,
+    string? LeagueNation);
 
 public sealed record ClubInfo(ulong Address, string Name, int Reputation);
 
@@ -188,6 +191,8 @@ public sealed class FmGame : IDisposable
         ulong club = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Club.Value);
         ulong comp = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Competition.Value);
 
+        var rel = Relations(v);
+
         // One read for the whole player block that sits before the person pointer.
         long shift = _playerShift.GetValueOrDefault(Memory.ReadPtr(v));
         ulong blockStart = (ulong)((long)v + PL.BlockStart.Value + shift);
@@ -224,7 +229,30 @@ public sealed class FmGame : IDisposable
             contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.StartDate.Value),
             team,
             CareerStat(block, Rel(PL.CareerStats), PL.CareerApps),
-            CareerStat(block, Rel(PL.CareerStats), PL.CareerGoals));
+            CareerStat(block, Rel(PL.CareerStats), PL.CareerGoals),
+            rel.nations, rel.clubs,
+            comp < 0x10000 || L.Team.CompetitionNation.Value == 0 ? null : FmString(Memory.ReadPtr(Memory.ReadPtr(comp + (ulong)L.Team.CompetitionNation.Value) + (ulong)L.Nation.Name.Value)));
+    }
+
+    /// <summary>Other nationalities (nation relation 9) and favoured clubs (club relation 3/4) from the person's relationship list.</summary>
+    (string[] nations, string[] clubs) Relations(ulong v)
+    {
+        if (Layout.Person.Relations.Value == 0) return ([], []);
+        ulong obj = Memory.ReadPtr(v + (ulong)Layout.Person.Relations.Value);
+        if (obj < 0x10000) return ([], []);
+        ulong b = Memory.ReadPtr(obj), e = Memory.ReadPtr(obj + 8);
+        long n = (long)(e - b) / 16;
+        if (b < 0x10000 || n <= 0 || n > 400) return ([], []);
+        var bytes = Memory.ReadBytes(b, (int)(n * 16)); if (bytes == null) return ([], []);
+        var nations = new List<string>(); var clubs = new List<string>();
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * 16; byte kind = bytes[o + 0xA], relation = bytes[o + 0xB];
+            ulong target = BitConverter.ToUInt64(bytes, o);
+            if (kind == 8 && relation == 9) { var s = FmString(Memory.ReadPtr(target + (ulong)Layout.Nation.Name.Value)); if (s != null) nations.Add(s); }
+            else if (kind == 1 && relation is 3 or 4) { var s = FmString(Memory.ReadPtr(target + (ulong)Layout.Club.Name.Value)); if (s != null) clubs.Add(s); }
+        }
+        return (nations.Distinct().ToArray(), clubs.Distinct().ToArray());
     }
 
     int CareerStat(byte[] block, int rel, Hex field)
@@ -236,6 +264,7 @@ public sealed class FmGame : IDisposable
 
     public void Dispose() => Memory.Dispose();
 }
+
 
 
 

@@ -37,6 +37,9 @@
         "dateOfBirth": "0x88",     // u16 day-of-year (1-based), u16 year
         "club": "0x108",           // PREVIOUS club (staff: Reiziger->Hannover, Wright->Man City, Vukcevic->Buducnost per their history). Current club = contract chain.
         "contract": "0xA8",        // Contract* for the current club (null if none)
+        "relations": "0x78",       // -> object with std::vector of 16-byte entries {target*, ?, u8 kind (+0xA), u8 relation (+0xB), u8 strength (+0xC)}
+                                   // kind 8 = nation, 1 = club, 3 = person. nation+relation 9 = other nationality (Musiala: England, Nigeria);
+                                   // club+relation 3/4 = favoured club (Haaland: Leeds, Viking); 0x48 = former club; nation 0x46 = played in
         "flags": "0x19",           // flag byte
         "femaleBit": 4             // bit set = female (100% of women's-league players, 0.2% elsewhere)
       },
@@ -50,7 +53,7 @@
         "squadStatus": "0x54",   // u8, see squadStatusNames
         "job": "0x26"            // u8 job code, see jobNames
       },
-      "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48" },
+      "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48", "competitionNation": "0x60" },
 
       "player": {
         "blockStart": "-0x288",
@@ -93,6 +96,7 @@
     }
   }
 }
+
 
 
 

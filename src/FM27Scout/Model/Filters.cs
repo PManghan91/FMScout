@@ -172,13 +172,24 @@ public static class FilterBuilder
         {
             "name" => p => p.Name + " " + p.FullName, "club" => p => p.Club, "league" or "comp" => p => p.League,
             "nation" or "nat" => p => p.Nation, "foot" => p => p.Foot, "status" => p => p.SquadStatusName,
-            "joinlabel" or "willing" => p => p.JoinLabel, "personality" or "pers" => p => p.PersonalityLabel, "outlook" or "development" => p => p.OutlookText, _ => null
+            "joinlabel" or "willing" => p => p.JoinLabel, "personality" or "pers" => p => p.PersonalityLabel, "nat2" or "passport" => p => p.Nationalities, "favclub" => p => string.Join(", ", p.Source.FavouredClubs), "outlook" or "development" => p => p.OutlookText, _ => null
         };
         if (text != null)
         {
             bool neg = op == "!=";
             if (op is not (":" or "=" or "!=")) throw new QueryError($"'{field}' only supports : or =");
             return p => Contains(text(p), val) != neg;
+        }
+        if (field is "wp" or "workpermit")
+        {
+            var w = val.ToLowerInvariant();
+            Func<PlayerRow, bool> m = w switch
+            {
+                "needed" or "yes" => p => p.WpNeeded, "none" or "no" => p => !p.WpNeeded && p.WpText.Length > 0,
+                "ok" or "likely" => p => !p.WpNeeded || p.WpText.Contains("likely OK"), "unlikely" => p => p.WpText.Contains("unlikely"),
+                _ => p => p.WpText.Contains(val, StringComparison.OrdinalIgnoreCase)
+            };
+            return op == "!=" ? p => !m(p) : m;
         }
         if (field is "pos" or "position")
         {
@@ -265,6 +276,7 @@ public static class Shortlist
     public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); File.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
     public static int Count => Ids.Count;
 }
+
 
 
 

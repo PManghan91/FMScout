@@ -23,6 +23,10 @@
   // loyal players are harder to prise away from their current club.
   "personality": { "perAmbitionPoint": 0.05, "loyaltyPointsPerPoint": -1.5 },
 
+  // FM relationship list: bonus if your club is one of his favoured clubs; penalty if a work permit looks unlikely.
+  "favouredClub": 15,
+  "workPermitUnlikely": -25,
+
   "contract": { "freeAgent": 22, "within6Months": 14, "within12Months": 7 },
 
   // contract.squadStatus code -> points (fringe players are easier to prise away).
@@ -39,5 +43,6 @@
     { "min": 0,  "label": "Very unlikely" }
   ]
 }
+
 
 

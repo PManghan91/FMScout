@@ -262,6 +262,9 @@ public partial class MainWindow : Window
         Text("apps", "Apps", "Moneyball", nameof(PlayerRow.CareerApps), p => p.CareerApps, visible: false, style: scoreStyle).HeaderStyle = HeaderTip("Career appearances");
         Text("goals", "Goals", "Moneyball", nameof(PlayerRow.CareerGoals), p => p.CareerGoals, visible: false, style: scoreStyle).HeaderStyle = HeaderTip("Career goals");
         Text("gpg", "Goals/game", "Moneyball", nameof(PlayerRow.GoalsPerGame), p => p.GoalsPerGame, visible: false, fmt: "F2", style: scoreStyle).HeaderStyle = HeaderTip("Career goals per appearance");
+        Text("wp", "WP", "Would join", nameof(PlayerRow.WpText), p => p.WpText, width: 140)
+            .HeaderStyle = HeaderTip("Work permit for your club's country. Passports from FM's data; 'Needed' verdicts are our estimate of the GBE rules.");
+        Text("nats", "Nationalities", "Basics", nameof(PlayerRow.Nationalities), p => p.Nationalities, visible: false, width: 170);
         Text("status", "Squad status", "Club & contract", nameof(PlayerRow.SquadStatusName), p => p.SquadStatusName, visible: false, width: 120);
         Text("rep", "Rep", "Reputation", nameof(PlayerRow.CurrentRep), p => p.CurrentRep, visible: false, style: scoreStyle);
         Text("hrep", "Home rep", "Reputation", nameof(PlayerRow.HomeRep), p => p.HomeRep, visible: false, style: scoreStyle);
@@ -334,11 +337,11 @@ public partial class MainWindow : Window
     static readonly string[] Always = ["name", "age", "pos", "club", "ca", "pa"];
     static readonly (string Name, string[] Keys)[] ColumnPresets =
     [
-        ("Overview", ["regen", "league", "nation", "best", "bestscore", "bestpot", "join", "joinlabel", "value", "wage", "expiry"]),
+        ("Overview", ["regen", "league", "nation", "best", "bestscore", "bestpot", "join", "joinlabel", "wp", "value", "wage", "expiry"]),
         ("Attributes", ["a.*Technical", "a.*Mental", "a.*Physical"]),
         ("Goalkeeping", ["a.*Goalkeeping", "a.*Mental", "a.*Physical"]),
         ("Moneyball", ["apps", "goals", "gpg", "best", "bestscore", "value", "vr", "vfm", "bargain", "join"]),
-        ("Contract & value", ["league", "status", "value", "vr", "wage", "expiry", "joined", "bargain", "join", "joinlabel"]),
+        ("Contract & value", ["league", "status", "value", "vr", "wage", "expiry", "joined", "bargain", "join", "joinlabel", "wp"]),
         ("Hidden & personality", ["personality", "outlook", "a.*Hidden", "rep", "wrep", "best", "bestscore", "bestpot"]),
     ];
 
@@ -613,6 +616,15 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
+    internal string SelfTestWp()
+    {
+        var my = MyClubCombo.SelectedItem as MyClub;
+        var sb = new System.Text.StringBuilder($"My club {my?.Name} nation {my?.Nation}; WP: " + string.Join(", ", _all.GroupBy(p => p.WpText).OrderByDescending(g => g.Count()).Select(g => $"{(g.Key == "" ? "(ours)" : g.Key)} {g.Count():N0}")) + "\n");
+        foreach (var n in new[] { "Erling Haaland", "Jamal Musiala", "Lamine Yamal", "Bart Verbruggen", "Jonas Urbig", "Javier Ortiz", "Ronnie Lede", "Bukayo Saka" })
+        { var p = _all.FirstOrDefault(x => x.Name == n); if (p != null) sb.AppendLine($"  {n}: {p.WpText} | {p.WpDetail} | favoured: {string.Join(", ", p.Source.FavouredClubs)}"); }
+        return sb.ToString();
+    }
+
     internal string SelfTestUpgrade()
     {
         var sb = new System.Text.StringBuilder();
@@ -763,22 +775,49 @@ public partial class MainWindow : Window
             g.PreviewMouseRightButtonDown += (s, e) =>
             {
                 var row = ItemsControl.ContainerFromElement(g, (DependencyObject)e.OriginalSource) as DataGridRow;
-                if (row == null) return;
-                row.IsSelected = true;
-                g.ContextMenu = BuildRowMenu((PlayerRow)row.Item);
+                if (row == null) { g.ContextMenu = null; return; }
+                if (!row.IsSelected) { g.SelectedItems.Clear(); row.IsSelected = true; }   // right-click outside the selection selects that row
+                var sel = g.SelectedItems.OfType<PlayerRow>().ToList();
+                g.ContextMenu = BuildRowMenu((PlayerRow)row.Item, sel.Count > 0 ? sel : [(PlayerRow)row.Item]);
             };
         }
     }
 
-    ContextMenu BuildRowMenu(PlayerRow p)
+    ContextMenu BuildRowMenu(PlayerRow p, List<PlayerRow> sel)
     {
         var menu = new ContextMenu();
-        var cmp = new MenuItem { Header = _compare.Contains(p) ? "Remove from comparison" : "Add to comparison" };
-        cmp.Click += (_, _) => { if (!_compare.Remove(p)) { if (_compare.Count >= 4) _compare.RemoveAt(0); _compare.Add(p); } RenderCompare(); StatusText.Text = $"Comparison ({_compare.Count}/4): {string.Join(", ", _compare.Select(x => x.Name))}"; };
+        string who = sel.Count == 1 ? "" : $" {sel.Count} players";
+        bool allIn = sel.All(_compare.Contains);
+        var cmp = new MenuItem { Header = allIn ? $"Remove{who} from comparison" : $"Add{who} to comparison" };
+        cmp.Click += (_, _) =>
+        {
+            if (allIn) foreach (var x in sel) _compare.Remove(x);
+            else
+            {
+                var add = sel.Where(x => !_compare.Contains(x)).ToList();
+                if (add.Count > 4) add = add.Take(4).ToList();
+                int over = _compare.Count + add.Count - 4;
+                if (over > 0)
+                {
+                    var drop = _compare.Take(over).ToList();
+                    if (MessageBox.Show(this, $"The comparison holds 4 players. Replace {string.Join(", ", drop.Select(d => d.Name))}?", "FM27 Scout",
+                        MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+                    foreach (var d in drop) _compare.Remove(d);
+                }
+                _compare.AddRange(add);
+            }
+            RenderCompare(); StatusText.Text = $"Comparison ({_compare.Count}/4): {string.Join(", ", _compare.Select(x => x.Name))}";
+        };
         menu.Items.Add(cmp);
-        var sl = new MenuItem { Header = Shortlist.Contains(p.Uid) ? "Remove from shortlist" : "Add to shortlist" };
-        sl.Click += (_, _) => { Shortlist.Toggle(p.Uid); StatusText.Text = $"Shortlist: {Shortlist.Count} players (sidebar › Shortlist only, or query: shortlist)"; };
+        bool allShort = sel.All(x => Shortlist.Contains(x.Uid));
+        var sl = new MenuItem { Header = allShort ? $"Remove{who} from shortlist" : $"Add{who} to shortlist" };
+        sl.Click += (_, _) =>
+        {
+            foreach (var x in sel) if (Shortlist.Contains(x.Uid) == allShort) Shortlist.Toggle(x.Uid);
+            StatusText.Text = $"Shortlist: {Shortlist.Count} players (sidebar › Shortlist only, or query: shortlist)";
+        };
         menu.Items.Add(sl);
+        if (sel.Count > 1) { menu.Items.Add(new Separator()); menu.Items.Add(new MenuItem { Header = $"(profile / upgrade below use {p.Name})", IsEnabled = false }); }
         var open = new MenuItem { Header = "Open comparison" };
         open.Click += (_, _) => { RenderCompare(); Tabs.SelectedIndex = 2; };
         var prof = new MenuItem { Header = "Open profile" };
@@ -884,7 +923,8 @@ public partial class MainWindow : Window
         BuildStaff(res.Staff);
         _today = res.GameDate ?? _today;
         var clubs = _all.Where(p => p.Source.Club != null).GroupBy(p => p.Club)
-            .Select(g => new MyClub(g.Key, g.Max(p => p.ClubRep), g.Max(p => p.Wage), g.Sum(p => p.Value), g.Count())).ToList();
+            .Select(g => new MyClub(g.Key, g.Max(p => p.ClubRep), g.Max(p => p.Wage), g.Sum(p => p.Value), g.Count(),
+                g.GroupBy(p => p.Source.LeagueNation).OrderByDescending(x => x.Count()).First().Key)).ToList();
         _myClubs = clubs.Where(c => res.HumanClubs.Contains(c.Name))
             .Concat(clubs.Where(c => !res.HumanClubs.Contains(c.Name)).OrderBy(c => c.Name)).ToList();
         var pick = _myClubs.FirstOrDefault(c => c.Name == _savedMyClub) ?? _myClubs.FirstOrDefault(c => res.HumanClubs.Contains(c.Name)) ?? _myClubs.FirstOrDefault();
@@ -910,7 +950,12 @@ public partial class MainWindow : Window
     void EvaluateJoin()
     {
         if (MyClubCombo.SelectedItem is not MyClub my) return;
-        foreach (var p in _all) _join.Evaluate(p, my, _today);
+        foreach (var p in _all)
+        {
+            var wp = WorkPermit.Check(p, my.Nation, my.Name);
+            p.WpText = wp.Text; p.WpDetail = wp.Detail; p.WpNeeded = wp.Needed;
+            _join.Evaluate(p, my, _today);
+        }
     }
 
     // ------------------------------------------------------------------ profile
@@ -946,6 +991,9 @@ public partial class MainWindow : Window
         if (p.FullName != null) Profile.Children.Add(T(p.FullName, 12, fg: muted));
         Profile.Children.Add(T($"{p.PositionsText}   ·   {p.Age} years old ({p.DateOfBirth:dd/MM/yyyy})   ·   {p.Nation}", 12.5, fg: muted));
         Profile.Children.Add(T($"{p.Club}   ·   {p.League}", 13.5, true));
+        if (p.Source.OtherNationalities.Length > 0) Profile.Children.Add(T($"Passports: {p.Nationalities}", 11.5, fg: muted));
+        if (p.Source.FavouredClubs.Length > 0) Profile.Children.Add(T($"Favoured clubs: {string.Join(", ", p.Source.FavouredClubs)}", 11.5, fg: muted));
+        if (p.WpText.Length > 0) Profile.Children.Add(T($"Work permit: {p.WpText}. {p.WpDetail}", 11.5, fg: p.WpText.Contains("unlikely") ? AttrBrush.Mid : muted));
 
         var facts = new WrapPanel { Margin = new Thickness(0, 10, 0, 6) };
         void Fact(string k, string v)
@@ -1186,6 +1234,7 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
 
 
 

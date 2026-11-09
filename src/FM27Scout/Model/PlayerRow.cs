@@ -49,6 +49,10 @@ public sealed class PlayerRow
     public string GainText { get; set; } = "";
     public string TeamName { get; set; } = "";
     public string PersonalityLabel { get; set; } = "";
+    public string Nationalities => string.Join(", ", new[] { Nation }.Concat(Source.OtherNationalities).Where(n => n.Length > 0).Distinct());
+    public string WpText { get; set; } = "";
+    public string WpDetail { get; set; } = "";
+    public bool WpNeeded { get; set; }
     public int CareerApps => Source.CareerApps;
     public int CareerGoals => Source.CareerGoals;
     public double GoalsPerGame => CareerApps > 0 ? CareerGoals / (double)CareerApps : 0;
@@ -116,6 +120,7 @@ public static class Attr
     public static readonly string[] Goalkeeping = ["AerialReach", "CommandOfArea", "Communication", "Eccentricity", "FirstTouch", "Handling", "Kicking", "OneOnOnes", "Passing", "Punching", "Reflexes", "RushingOut", "Throwing"];
     public static readonly string[] Hidden = ["Consistency", "Dirtiness", "ImportantMatches", "InjuryProneness", "Versatility"];
 }
+
 
 
 

@@ -75,6 +75,21 @@ Results open in the Players tab with a **Gain** column (e.g. "+6 now" or "+9 at 
 ### Shortlist
 Add players with right-click › Add to shortlist. Filter with the sidebar's **Shortlist only** box or the query `shortlist`. It is saved in `%APPDATA%\FM27Scout\shortlist.json`.
 
+### Multi-select
+Players, Squad, Staff and the finder results support Ctrl+click (one at a time), Shift+click (a range) and Ctrl+A. Right-click › Add/Remove N to comparison (it asks before replacing when more than 4) and Add/Remove N to shortlist apply to every selected player. Double-click still opens one profile.
+
+### Work permit (WP)
+* **Nationalities come from FM's own data:** the person's relationship list at person+0x78. Entries with kind *nation* and relation 9 are extra nationalities, e.g. Musiala → England and Nigeria.
+* **The rule follows the "My club" country:**
+  * **No:** he holds a passport of your club's country.
+  * **No:** in the UK, any British or Irish passport counts.
+  * **No (EU):** an EU passport, when your club is in the EU.
+  * **For English clubs otherwise:** an **estimate** of the GBE points system, from world reputation, current league strength, CA and a youth/high-potential concession. It reads *Needed – likely OK*, *Needed – borderline* or *Needed – unlikely*.
+  * **Non-EU:** elsewhere outside the EU.
+* FM decides the real permit when a transfer is agreed. The profile shows the passports and the reasoning.
+* Query: `wp:needed`, `wp:none`, `wp:ok`, `wp:unlikely`.
+* The Join estimate gets a penalty when a permit looks unlikely, and a bonus when your club is one of his **favoured clubs** (also from FM's relationship list).
+
 ### Clubs tab
 Squads built from the loaded players: player count, average and best CA, average PA, average age, squad value, wage bill and best player. Double-click a club to list its players.
 
@@ -137,6 +152,7 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
 
 

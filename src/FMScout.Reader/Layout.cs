@@ -45,12 +45,13 @@ public sealed class PersonLayout
     public Hex DateOfBirth { get; set; }
     public Hex Club { get; set; }
     public Hex Contract { get; set; }
+    public Hex Relations { get; set; }
     public Hex Flags { get; set; }
     public int FemaleBit { get; set; }
 }
 
 public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } public Hex SquadStatus { get; set; } public Hex Job { get; set; } }
-public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } }
+public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } public Hex CompetitionNation { get; set; } }
 
 public sealed class NationLayout { public Hex Name { get; set; } public Hex Code { get; set; } public Hex Nationality { get; set; } }
 public sealed class ClubLayout { public Hex Name { get; set; } public Hex ShortName { get; set; } public Hex Reputation { get; set; } }
@@ -110,6 +111,7 @@ public static class LayoutFile
         return JsonSerializer.Deserialize<Root>(json, opts)!.Builds;
     }
 }
+
 
 
 
