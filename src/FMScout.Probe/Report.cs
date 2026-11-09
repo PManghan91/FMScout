@@ -53,7 +53,7 @@ static class Report
         int? age = p.DateOfBirth is { } d && today is { } t ? t.Year - d.Year - (t.DayOfYear < d.DayOfYear ? 1 : 0) : null;
         Console.WriteLine($"## {p.Name}{(p.FullName != null ? $" ({p.FullName})" : "")}   uid {p.Uid}   @0x{p.Address:X}");
         Console.WriteLine($"   DOB {p.DateOfBirth:yyyy-MM-dd} (age {age})   {p.Nationality}   club: {p.Club ?? "-"} ({p.Competition})   [linked club @+0x108: {p.LinkedClub ?? "-"}]");
-        Console.WriteLine($"   wage £{p.WeeklyWage:N0} p/w   contract to {p.ContractExpiry:dd/MM/yyyy}   value £{p.Value:N0} (tentative)");
+        Console.WriteLine($"   wage £{p.WeeklyWage:N0} p/w   contract to {p.ContractExpiry:dd/MM/yyyy}   value £{p.Value:N0}");
         Console.WriteLine($"   CA {p.CurrentAbility}   PA {p.PotentialAbility}   height {p.HeightCm} cm   weight: (unknown)");
         var pos = g.Layout.PositionNames;
         Console.WriteLine("   positions: " + string.Join(" ", p.Positions.Select((v, i) => $"{pos[i]}={v}")));
@@ -67,6 +67,7 @@ static class Report
         Console.WriteLine();
     }
 }
+
 
 
 

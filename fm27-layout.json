@@ -46,16 +46,16 @@
         "height": "-0x5A",           // u8 cm
         "currentAbility": "-0x24",   // s16 1-200
         "potentialAbility": "-0x22", // s16 1-200 (negative = range, none seen in this save)
-        "value": "-0x54"             // u32 GBP, tentative: Yamal 221.9M (UI 202-222M), Verbruggen 25.2M (UI 19.5-25M), Haaland exactly 300M (Not for Sale)
+        "value": "-0x54"             // u32 GBP. Inside UI range for Yamal, Urbig, Ortiz; Verbruggen 25.2M vs UI 19.5-25M; Haaland 300M (Not for Sale)
       },
 
       // Order from known players: GK Verbruggen; DC Cubarsi/Huijsen/Yoro (idx3); DL+WBL Andueza; DR+WBR Javier Ortiz; DM/MC/AMC Bellingham; AMR Yamal; ST Haaland.
-      // idx1 is 1 for everyone -> Sweeper (legacy). WBL/WBR still to confirm with a screenshot.
+      // idx1 is 1 for everyone -> Sweeper (legacy). Confirmed by Javier Ortiz screenshot (DR 20, WBR 15, DL 7).
       "positionNames": [ "GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR" ],
 
       // 54 attributes, raw 1-100 (UI = round(raw/5)). Order = FM's classic internal order.
       // Confirmed against UI for Haaland, Yamal, Verbruggen: all 36 outfield + Handling, CommandOfArea, OneOnOnes, Eccentricity, RushingOut, Punching.
-      // Inferred from the order (only one GK screenshot): AerialReach/Communication/Reflexes (12/14/21 all 15), Kicking/Throwing (15/16 both 17), and the 5 hidden attributes.
+      // All 13 GK attributes confirmed with Urbig screenshot. Only the 5 hidden attributes (41,44,47,48,49) are named from the order.
       "attributeNames": [
         "Crossing", "Dribbling", "Finishing", "Heading", "LongShots", "Marking", "OffTheBall", "Passing", "Penalties", "Tackling", "Vision",
         "Handling", "AerialReach", "CommandOfArea", "Communication", "Kicking", "Throwing",
@@ -69,5 +69,6 @@
     }
   }
 }
+
 
 

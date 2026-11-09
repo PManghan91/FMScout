@@ -50,9 +50,31 @@ Personality Driven. L foot Very Strong, R Fairly Strong. Value £202M-£222M. £
 * Physical: Acceleration 15, Agility 19, Balance 17, Jumping Reach 7, Natural Fitness 15, Pace 15, Stamina 15, Strength 13
 * Traits: Curls Ball, Uses Outside Of Foot, Tries Tricks, Runs With Ball Often, Cuts Inside From Right Wing
 
+## Second batch (Wed 4/2/2037 23:00)
+
+### Jonas Urbig: Chelsea (Premier League), GK, b. 8/8/2003, Germany, 6'2"
+Personality Professional. L foot Fairly Strong, R Very Strong. Value £37M-£58M. £350K-£400K p/w to 30/6/2038. Domestic Cup Goalkeeper. 45 caps.
+
+* Goalkeeping: Aerial Reach 14, Command Of Area 15, Communication 13, Eccentricity 12, First Touch 14, Handling 14, Kicking 17, One On Ones 18, Passing 16, Punching 8, Reflexes 17, Rushing Out 18, Throwing 18
+* Mental: Aggression 12, Anticipation 16, Bravery 15, Composure 16, Concentration 16, Decisions 15, Determination 16, Flair 10, Leadership 15, Off The Ball 8, Positioning 16, Teamwork 12, Vision 16, Work Rate 13
+* Physical: Acceleration 8, Agility 15, Balance 14, Jumping Reach 18, Natural Fitness 14, Pace 9, Stamina 10, Strength 12
+* Also shown: Free Kick 3, Penalty 7, Technique 14
+
+Reader: every value matches. This settles the GK ties: Aerial Reach is index 12, Communication 14, Reflexes 21, Kicking 15, Throwing 16. Wage 353,404 and value 40,745,096 are both inside the UI ranges. Height 189 cm, shown as 6'2".
+
+### Javier Ortiz: Man City (Premier League), D/WB (R), b. 26/4/2011, El Salvador, 6'2"
+Not fully scouted, so the UI shows ranges. L foot Fairly Strong, R Very Strong. Value £81M-£133M. £350K-£500K p/w to 30/6/2040. Regular Starter.
+
+Pitch: green dot at DR, yellow-green at WBR, orange at DL.
+
+Reader: positions DR=20, WBR=15, DL=7, which confirms the position order. All exact UI values match (Crossing 16, First Touch 15, Marking 16, Passing 13, Tackling 15, Positioning 14, Determination 15, Acceleration 18, Pace 16, Strength 13). Every ranged value falls inside its range (e.g. Technique 17 in 15-19, Anticipation 17 in 16-20). Wage 395,662 and value 111,375,000 are inside the UI ranges.
+
+**Note:** the reader shows the TRUE attribute values, even where the game UI only shows scouting ranges.
+
 ## How the attribute indices were solved
 For every attribute name, I kept only the raw indices where round(raw/5) equals the UI value for all three players, then eliminated indices already taken. That gives a unique index for all 36 outfield attributes and for 6 GK ones.
 
-The remaining GK ties are Aerial Reach, Communication and Reflexes (all 15 on Verbruggen, indices 12, 14 and 21) and Kicking and Throwing (both 17, indices 15 and 16). The full sequence matches FM's classic internal attribute order, and I used that order to break these ties. A second goalkeeper's screenshot would confirm them.
+The GK ties left over from Verbruggen (Aerial Reach, Communication and Reflexes at indices 12, 14 and 21; Kicking and Throwing at 15 and 16) are now confirmed by Urbig.
 
 The 5 leftover indices are the hidden attributes, also named from that order: 41 Dirtiness, 44 Consistency, 47 Important Matches, 48 Injury Proneness, 49 Versatility. They are always multiples of 5 and don't correlate with CA.
+

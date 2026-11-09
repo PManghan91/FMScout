@@ -78,7 +78,7 @@ Every displayed value equals `round(raw/5)` for Haaland, Yamal and Verbruggen. S
 48 InjuryProneness† 49 Versatility† 50 NaturalFitness 51 Determination 52 Composure 53 Concentration
 ```
 
-\* These are GK ties that I broke using the known order; a second GK screenshot would confirm them. † Hidden attributes, named from the order.
+\* GK ties on Verbruggen, now confirmed by Urbig. † Hidden attributes, named from the order.
 
 The feet use the same 1-100 scale: 100 = Very Strong, 60 = Fairly Strong, 55 = Reasonable.
 
@@ -105,9 +105,9 @@ Sanity: 100.0% have CA in 1-200; PA>=CA for 100.0%; heights 151-210 cm
 Run it yourself to see the full attribute dump.
 
 ## Still unknown or to verify
-1. Position-rating order is now `GK, SW, DL, DC, DR, DM, ML, MC, MR, AML, AMC, AMR, ST, WBL, WBR`, inferred from known centre-backs and full-backs. WBL/WBR still need a screenshot to confirm.
+1. Position-rating order `GK, SW, DL, DC, DR, DM, ML, MC, MR, AML, AMC, AMR, ST, WBL, WBR` is confirmed (Javier Ortiz screenshot).
 2. Personality block order (8 bytes at +0x70).
-4. Value: the field is tentative.
+4. Value (person−0x54) is inside the UI range for Yamal, Urbig and Ortiz. Haaland reads 300M (Not for Sale).
 5. Meaning of the +0x108 club pointer.
 6. Not decoded yet: known-as names, traits, reputation, playing-time status, and caps/goals.
 7. The layout is per build. A game patch will very likely move the RVAs. The exploration commands make re-deriving them quick: `who <surname>`, then `arrays`, then `refsany`.
@@ -117,5 +117,6 @@ dotnet build -c Release
 src\FMScout.Probe\bin\Release\net10.0\FMScout.Probe.exe report Haaland Saka
 ```
 This needs FM27 running with a save loaded. It targets .NET 10 (the SDK installed here) on x64.
+
 
 
