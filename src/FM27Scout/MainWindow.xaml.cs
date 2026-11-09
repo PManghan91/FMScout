@@ -53,6 +53,8 @@ public partial class MainWindow : Window
         LoadSettings();
         RefreshSaved();
         AttachContextMenus();
+        AttachHeaderMenu();
+        foreach (var g in new[] { SquadGrid, StaffGrid, ClubGrid }) AttachSimpleHeaderMenu(g);
         RenderCompare();
         QueryBox.TextChanged += (_, _) => QueryHint.Visibility = QueryBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Closing += (_, _) => SaveSettings();
@@ -63,6 +65,7 @@ public partial class MainWindow : Window
             else if (ctrl && e.Key == Key.F) { Tabs.SelectedIndex = 0; QueryBox.Focus(); QueryBox.SelectAll(); e.Handled = true; }
             else if (ctrl && e.Key >= Key.D1 && e.Key <= Key.D6) { Tabs.SelectedIndex = Math.Min(Tabs.Items.Count - 1, e.Key - Key.D1); e.Handled = true; }
             else if (e.Key == Key.Escape && QueryBox.IsKeyboardFocused) { QueryBox.Text = ""; ApplyFilters(); e.Handled = true; }
+            else if (e.Key == Key.Escape && ProfilePanel.Visibility == Visibility.Visible) { CloseProfile(); e.Handled = true; }
         };
     }
 
@@ -375,7 +378,74 @@ public partial class MainWindow : Window
 
     void Columns_Click(object sender, RoutedEventArgs e)
     {
+        var menu = BuildColumnsMenu(null);
+        menu.PlacementTarget = ColumnsButton;
+        menu.IsOpen = true;
+    }
+
+    void AttachHeaderMenu()
+    {
+        PlayerGrid.PreviewMouseRightButtonUp += (s, e) =>
+        {
+            var h = FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>((DependencyObject)e.OriginalSource);
+            if (h == null) return;
+            e.Handled = true;
+            var menu = BuildColumnsMenu(h.Column);
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+        };
+    }
+
+    /// <summary>Header right-click for the smaller grids: tick columns on/off.</summary>
+    void AttachSimpleHeaderMenu(DataGrid grid)
+    {
+        grid.PreviewMouseRightButtonUp += (s, e) =>
+        {
+            var h = FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>((DependencyObject)e.OriginalSource);
+            if (h == null) return;
+            e.Handled = true;
+            var menu = BuildSimpleColumnsMenu(grid, h.Column);
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+        };
+    }
+
+    internal static ContextMenu BuildSimpleColumnsMenu(DataGrid grid, DataGridColumn? clicked)
+    {
         var menu = new ContextMenu();
+        if (clicked != null && grid.Columns.IndexOf(clicked) > 0)
+        {
+            var hide = new MenuItem { Header = $"Hide \"{clicked.Header}\"" };
+            hide.Click += (_, _) => clicked.Visibility = Visibility.Collapsed;
+            menu.Items.Add(hide); menu.Items.Add(new Separator());
+        }
+        foreach (var col in grid.Columns.Skip(1))
+        {
+            var c = col;
+            var mi = new MenuItem { Header = c.Header?.ToString(), IsCheckable = true, IsChecked = c.Visibility == Visibility.Visible, StaysOpenOnClick = true };
+            mi.Click += (_, _) => c.Visibility = mi.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+            menu.Items.Add(mi);
+        }
+        menu.Items.Add(new Separator());
+        var all = new MenuItem { Header = "Show all columns" };
+        all.Click += (_, _) => { foreach (var c in grid.Columns) c.Visibility = Visibility.Visible; };
+        menu.Items.Add(all);
+        return menu;
+    }
+
+    internal ContextMenu SelfTestColumnsMenu() => BuildColumnsMenu(PlayerGrid.Columns.FirstOrDefault(c => c.Visibility == Visibility.Visible && (string)c.Header == "Club"));
+
+    ContextMenu BuildColumnsMenu(DataGridColumn? clicked)
+    {
+        var menu = new ContextMenu();
+        var spec0 = clicked == null ? null : _cols.FirstOrDefault(c => c.Column == clicked);
+        if (spec0 != null && spec0.Key != "name")
+        {
+            var hide = new MenuItem { Header = $"Hide \"{spec0.Header}\"" };
+            hide.Click += (_, _) => spec0.Column.Visibility = Visibility.Collapsed;
+            menu.Items.Add(hide);
+            menu.Items.Add(new Separator());
+        }
         foreach (var g in _cols.Where(c => c.Key is not ("role" or "rolepot")).GroupBy(c => c.Group))
         {
             var sub = new MenuItem { Header = g.Key };
@@ -402,13 +472,13 @@ public partial class MainWindow : Window
             mi.Click += (_, _) => ApplyColumnPreset(keys);
             presets.Items.Add(mi);
         }
-        menu.Items.Insert(0, presets);
-        menu.Items.Insert(1, new Separator());
+        int at = spec0 != null && spec0.Key != "name" ? 2 : 0;
+        menu.Items.Insert(at, presets);
+        menu.Items.Insert(at + 1, new Separator());
         var reset = new MenuItem { Header = "Reset to defaults" };
         reset.Click += (_, _) => { foreach (var c in _cols) if (c.Key is not ("role" or "rolepot")) c.Column.Visibility = c.DefaultVisible ? Visibility.Visible : Visibility.Collapsed; };
         menu.Items.Add(new Separator()); menu.Items.Add(reset);
-        menu.PlacementTarget = ColumnsButton;
-        menu.IsOpen = true;
+        return menu;
     }
 
     // ------------------------------------------------------------------ loading
@@ -595,7 +665,7 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
-    internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; ShowProfile(_view[i]); } }
+    internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; OpenProfile(_view[i]); } }
 
     // ------------------------------------------------------------------ staff
     List<StaffRow> _staff = [];
@@ -667,16 +737,23 @@ public partial class MainWindow : Window
         Tabs.SelectedIndex = 0;
         ApplyFilters();
         PlayerGrid.SelectedIndex = 0;
-        ShowProfile(p);
+        OpenProfile(p);
     }
 
     void SquadGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (SquadGrid.SelectedItem is PlayerRow p) ShowInPlayers(p); }
-    void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (PlayerGrid.SelectedItem is PlayerRow p) { Tabs.SelectedIndex = 0; ShowProfile(p); } }
-
-    void SquadGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (SquadGrid.SelectedItem is PlayerRow p) ShowProfile(p);
+        if (e.OriginalSource is DependencyObject d && FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) != null) return; // header double-click
+        if (PlayerGrid.SelectedItem is PlayerRow p) OpenProfile(p);
     }
+
+    static T? FindParent<T>(DependencyObject d) where T : DependencyObject
+    {
+        while (d != null && d is not T) d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+        return d as T;
+    }
+
+    void SquadGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
 
     void AttachContextMenus()
     {
@@ -839,8 +916,24 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ profile
     void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
+        // only refresh the profile if it is already open (it opens on double-click)
+        if (ProfilePanel.Visibility == Visibility.Visible && PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
     }
+
+    void OpenProfile(PlayerRow p)
+    {
+        ProfilePanel.Visibility = Visibility.Visible;
+        ProfileCol.Width = new GridLength(390);
+        ShowProfile(p);
+    }
+
+    void CloseProfile()
+    {
+        ProfilePanel.Visibility = Visibility.Collapsed;
+        ProfileCol.Width = new GridLength(0);
+    }
+
+    void CloseProfile_Click(object sender, RoutedEventArgs e) => CloseProfile();
 
     void ShowProfile(PlayerRow p)
     {
@@ -1093,6 +1186,8 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
+
 
 
 

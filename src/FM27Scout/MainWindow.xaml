@@ -45,7 +45,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="SidebarCol" Width="290"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="380"/>
+                        <ColumnDefinition x:Name="ProfileCol" Width="0"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Filter sidebar -->
@@ -119,12 +119,18 @@
                               FrozenColumnCount="1" CanUserSortColumns="True"/>
 
                     <!-- Profile -->
-                    <Border Grid.Column="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+                    <Border x:Name="ProfilePanel" Grid.Column="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed">
+                        <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="14,8,8,0">
+                            <Button DockPanel.Dock="Right" Content="✕" Padding="8,2" Click="CloseProfile_Click" ToolTip="Close (Esc)"/>
+                            <TextBlock Text="Player profile" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                        </DockPanel>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="Profile" Margin="14">
-                                <TextBlock Text="Select a player" Foreground="{StaticResource Muted}"/>
+                                <TextBlock Text="Double-click a player" Foreground="{StaticResource Muted}"/>
                             </StackPanel>
                         </ScrollViewer>
+                        </DockPanel>
                     </Border>
                 </Grid>
             </TabItem>
@@ -241,6 +247,7 @@
         </TabControl>
     </DockPanel>
 </Window>
+
 
 
 

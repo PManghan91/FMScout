@@ -9,6 +9,7 @@
 
 ### Players tab
 * **Grid:** virtualised, so it stays fast with 140k rows. Click any column header to sort; the first click on a number column sorts high to low. You can reorder columns by dragging.
+* **Right-click any column header** to hide that column, show or hide others by group, or apply a preset. This works in every grid.
 * **Columns ▾:** pick columns by group (Basics, Roles, Club & contract, Technical, Mental, Physical, Goalkeeping, Hidden, Feet, Role scores). Visibility and order are remembered.
 * **Sidebar:** collapsible sections.
   * Basics: name, age, CA, PA, nationality, height.
@@ -24,7 +25,7 @@
   club:arsenal nation:brazil foot:left contract<=2037  gk  free  haaland
   ```
 * **Saved searches:** save the whole state (sidebar and query) under a name and pick it from the drop-down.
-* **Profile panel:** FM-style Technical (or Goalkeeping), Mental and Physical columns, hidden attributes, best roles with score and potential, position ratings, and the contract.
+* **Profile panel** (opens on **double-click**; close it with ✕ or Esc, and the grid then uses the full width): FM-style Technical (or Goalkeeping), Mental and Physical columns, hidden attributes, best roles with score and potential, position ratings, and the contract.
 * It shows the **true** values even where the game only shows scouting ranges.
 
 ### Would he join us? (estimate)
@@ -136,6 +137,7 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
 
 

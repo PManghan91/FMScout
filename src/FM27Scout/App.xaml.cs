@@ -52,9 +52,42 @@ public partial class App : Application
         Render(w, Path.Combine(outDir, "selftest-compare.png"), 2);
         Render(w, Path.Combine(outDir, "selftest-clubs.png"), 3);
         Render(w, Path.Combine(outDir, "selftest-staff.png"), 4);
+        RenderMenu(w.SelfTestColumnsMenu(), Path.Combine(outDir, "selftest-menu.png"));
         File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString());
     }
 
+    /// <summary>Renders a context menu's items and its first submenu's items off-screen, using the app's menu styles.</summary>
+    static void RenderMenu(System.Windows.Controls.ContextMenu menu, string path)
+    {
+        System.Windows.Controls.Border Box(IEnumerable<object> items)
+        {
+            var sp = new System.Windows.Controls.StackPanel();
+            foreach (var it in items.ToList())
+            {
+                if (it is System.Windows.Controls.MenuItem mi)
+                {
+                    var copy = new System.Windows.Controls.MenuItem { Header = mi.Header, IsCheckable = mi.IsCheckable, IsChecked = mi.IsChecked };
+                    if (mi.HasItems) copy.Items.Add(new System.Windows.Controls.MenuItem { Header = "x" });
+                    sp.Children.Add(copy);
+                }
+                else sp.Children.Add(new System.Windows.Controls.Separator());
+            }
+            return new System.Windows.Controls.Border { Background = (Brush)Current.FindResource("Panel2"), BorderBrush = (Brush)Current.FindResource("Line"), BorderThickness = new Thickness(1), Padding = new Thickness(2), Margin = new Thickness(10), Child = sp, VerticalAlignment = VerticalAlignment.Top };
+        }
+        var top = menu.Items.Cast<object>();
+        var sub = menu.Items.OfType<System.Windows.Controls.MenuItem>().First(m => m.HasItems);
+        var b1 = Box(top); var b2 = Box(sub.Items.Cast<object>());
+        // fake hover on the first submenu item to show the highlight colour
+        ((System.Windows.Controls.MenuItem)((System.Windows.Controls.StackPanel)b2.Child).Children[0]).IsChecked = true; // shows the tick style
+        var panel = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Background = (Brush)Current.FindResource("Bg") };
+        panel.Children.Add(b1); panel.Children.Add(b2);
+        var size = new Size(700, 420);
+        panel.Measure(size); panel.Arrange(new Rect(size)); panel.UpdateLayout();
+        var bmp = new RenderTargetBitmap(700, 420, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(panel);
+        var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(bmp));
+        using var fs = File.Create(path); enc.Save(fs);
+    }
     static System.Windows.Controls.Border? _host;
     static void Render(MainWindow w, string path, int tab)
     {
@@ -80,6 +113,9 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
+
+
 
 
 
