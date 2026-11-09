@@ -418,6 +418,23 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
+    internal string SelfTestPotential()
+    {
+        var m = _roles.Potential; if (m == null) return "no model";
+        var sb = new System.Text.StringBuilder("Potential model fit (R² per group) and top CA-weighted attributes:\n");
+        for (int g = 0; g < PotentialModel.Groups.Length; g++)
+        {
+            var top = m.Importance[g].Select((v, i) => (v, i)).OrderByDescending(t => t.v).Take(6).Select(t => $"{Attr.Names[t.i]} {t.v:0.0}");
+            sb.AppendLine($"  {PotentialModel.Groups[g],-4} R²={m.FitR2[g]:0.000}  {string.Join(", ", top)}");
+        }
+        foreach (var n in new[] { "Víctor Gutiérrez", "Kieran Bird", "Ronnie Lede" })
+        {
+            var p = _all.FirstOrDefault(x => x.Name == n);
+            if (p != null) sb.AppendLine($"  {p.Name} ({p.Age}, CA {p.CA}/PA {p.PA}): best {p.BestRole} {p.BestRoleScore:F0} -> pot {p.BestPotentialScore:F0}");
+        }
+        return sb.ToString();
+    }
+
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; ShowProfile(_view[i]); } }
 
     // ------------------------------------------------------------------ my club / join estimate
@@ -693,6 +710,8 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
+
 
 
 

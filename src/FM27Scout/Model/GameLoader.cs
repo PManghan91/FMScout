@@ -81,9 +81,11 @@ public static class GameLoader
                     PositionsText = Positions.Describe(p.Positions),
                     SquadStatusName = p.Club == null ? "" : game.Layout.SquadStatusNames.TryGetValue(p.SquadStatus.ToString(), out var sn) ? sn : $"Status {p.SquadStatus}",
                 };
-                roles.Apply(row);
                 rows.Add(row);
             }
+            progress?.Report("Fitting the potential model to this save…");
+            roles.Potential = PotentialModel.Fit(rows);
+            foreach (var r in rows) roles.Apply(r);
             return new LoadResult
             {
                 Players = rows, Build = game.BuildKey, GameDate = game.GameDate, PeopleInDb = persons.Length,
@@ -92,4 +94,6 @@ public static class GameLoader
         }
     }
 }
+
+
 

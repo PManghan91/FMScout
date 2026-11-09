@@ -28,6 +28,8 @@ public sealed class RoleSet
     public AgeRule[] PotentialAge { get; set; } = [];
     public RoleDef[] Roles { get; set; } = [];
     public string? SourcePath { get; private set; }
+    /// <summary>Fitted from the save at load time; when set, potential growth follows CA importance per position.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public PotentialModel? Potential { get; set; }
 
     static readonly JsonSerializerOptions Opts = new() { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
@@ -81,8 +83,8 @@ public sealed class RoleSet
     }
 
     /// <summary>
-    /// Potential estimate: assume every attribute grows towards 20 in proportion to the player's
-    /// remaining ability headroom ((PA-CA)/(200-CA)), damped by age (see potentialAge in roles.json).
+    /// Fallback potential estimate (used only before the save-fitted PotentialModel exists): every attribute grows
+    /// towards 20 in proportion to the remaining headroom ((PA-CA)/(200-CA)), damped by age.
     /// This is our own heuristic - FM does not store "future attributes".
     /// </summary>
     public double AgeFactor(int? age)
@@ -91,6 +93,17 @@ public sealed class RoleSet
         foreach (var r in PotentialAge.OrderBy(r => r.MaxAge)) if (a <= r.MaxAge) return r.Factor;
         return 0;
     }
+
+    public double PotentialScore(RoleDef r, PlayerRow p, double[]? projected)
+    {
+        if (projected == null) return Score(r, p.A, p.Positions);
+        double s = 0, tw = 0;
+        foreach (var (i, w) in r.Weights) { s += w * projected[i]; tw += w; }
+        int fam = r.PosIdx.Length == 0 ? 20 : r.PosIdx.Max(i => (int)p.Positions[i]);
+        return tw == 0 ? 0 : s / tw * 5 * Familiarity01(fam);
+    }
+
+    public double Growth(PlayerRow p) => p.PA <= p.CA || p.CA >= 200 ? 0 : (p.PA - p.CA) / (double)(200 - p.CA) * AgeFactor(p.Age);
 
     public double PotentialScore(RoleDef r, int[] attrs, byte[] positions, int ca, int pa, int? age)
     {
@@ -107,10 +120,14 @@ public sealed class RoleSet
         var sc = new double[Roles.Length];
         var pot = new double[Roles.Length];
         int best = -1;
+        double g = Growth(p);
+        // expected CA gain = remaining headroom (PA-CA) damped by age; then spread over attributes by the fitted model
+        double caGain = p.PA > p.CA ? (p.PA - p.CA) * AgeFactor(p.Age) : 0;
+        double[]? proj = Potential != null && caGain > 0 ? Potential.ProjectToCa(p, caGain) : null;
         for (int i = 0; i < Roles.Length; i++)
         {
             sc[i] = Score(Roles[i], p.A, p.Positions);
-            pot[i] = PotentialScore(Roles[i], p.A, p.Positions, p.CA, p.PA, p.Age);
+            pot[i] = Potential != null ? PotentialScore(Roles[i], p, proj) : PotentialScore(Roles[i], p.A, p.Positions, p.CA, p.PA, p.Age);
             if (best < 0 || sc[i] > sc[best]) best = i;
         }
         p.RoleScores = sc; p.PotentialRoleScores = pot;
@@ -120,5 +137,8 @@ public sealed class RoleSet
     public int IndexOf(string codeOrName) => Array.FindIndex(Roles, r =>
         r.Code.Equals(codeOrName, StringComparison.OrdinalIgnoreCase) || r.Name.Equals(codeOrName, StringComparison.OrdinalIgnoreCase));
 }
+
+
+
 
 

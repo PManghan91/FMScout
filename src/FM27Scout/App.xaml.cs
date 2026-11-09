@@ -40,6 +40,7 @@ public partial class App : Application
         log.WriteLine(w.SelfTestSample("Haaland"));
         log.WriteLine(w.SelfTestSample("Lamine Yamal"));
         log.WriteLine(w.SelfTestJoin());
+        log.WriteLine(w.SelfTestPotential());
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
@@ -66,4 +67,5 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
 

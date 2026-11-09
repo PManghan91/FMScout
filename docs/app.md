@@ -49,7 +49,11 @@ Not done yet. Staff use a separate person class in the game's database, and thei
 ## Role scores
 * `score = Σ(weight × attribute) / Σ(weight) × 5`, which gives 0-100. It is then multiplied by a familiarity factor taken from the player's best rating among the role's positions.
 * Weights use tiers: Key ×3, Important ×2, Useful ×1. The weights are our own.
-* **Potential:** each attribute grows towards 20 by `(PA−CA)/(200−CA) × ageFactor`. The age factor drops with age and reaches 0 from 30.
+* **Potential:** fitted from your save at every load. For each position group (GK, DC, FB, DM, MC, W, AMC, ST), the app fits a least-squares model of how many CA points each attribute is worth (R² 0.97–0.99 in BRR).
+  * The expected CA gain is `(PA−CA) × ageFactor`. The age factor drops with age and reaches 0 from 30; edit it under `potentialAge`.
+  * That gain is spread over the attributes that matter most for the player's position group.
+  * Physical attributes develop less after 23.
+  * The role scores are then recalculated on the projected attributes. This is an estimate: FM decides development during play.
 * Everything lives in `%APPDATA%\FM27Scout\roles.json`. **Roles…** opens it. Edit it, then press Load from game to recalculate. Delete the file to get the defaults back.
 
 ## Patching for a new FM build
@@ -68,4 +72,5 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+
 
