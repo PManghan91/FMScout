@@ -12,6 +12,40 @@ if (args.Length > 0 && args[0] == "poscands")
     foreach (var p in gk) Console.WriteLine($"GK {p.Name,-28} CA {p.CurrentAbility} {p.Club} AR {p.Attributes[12]} Com {p.Attributes[14]} Ref {p.Attributes[21]} Kick {p.Attributes[15]} Thr {p.Attributes[16]}");
     return;
 }
+if (args.Length > 0 && args[0] == "clubs")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var ps = g.PlayerPointers().Select(g.ReadPlayer).ToList();
+    foreach (var grp in ps.GroupBy(p => p.Competition ?? "-").OrderByDescending(x => x.Count()).Where(x => args.Length < 2 || x.Key.Contains(args[1], StringComparison.OrdinalIgnoreCase)).Take(40))
+        Console.WriteLine($"{grp.Count(),6} {grp.Key}");
+    return;
+}
+if (args.Length > 0 && args[0] == "gender")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var ps = g.PlayerPointers().Select(g.ReadPlayer).ToList();
+    bool W(Player p) => (p.Competition ?? "").Contains("Wom", StringComparison.OrdinalIgnoreCase) || (p.Competition ?? "").Contains("Femin", StringComparison.OrdinalIgnoreCase);
+    var women = ps.Where(W).ToList(); var men = ps.Where(p => !W(p) && p.Competition != null).ToList();
+    Console.WriteLine($"{women.Count} women, {men.Count} men");
+    foreach (var w in women.Take(8)) Console.WriteLine($"  {w.Name} {w.Club} {w.DateOfBirth}");
+    const int lo = -0x288, hi = 0x140;
+    byte[] Rd(Player p) => g.Memory.ReadBytes(p.Address - 0x288, hi - lo)!;
+    var wb = women.Select(Rd).ToList(); var mb = men.Select(Rd).ToList();
+    for (int i = 0; i < hi - lo; i++)
+    {
+        var wv = wb.GroupBy(b => b[i]).OrderByDescending(x => x.Count()).First();
+        if (wv.Count() < women.Count * 0.9) continue;
+        double menSame = mb.Count(b => b[i] == wv.Key) / (double)mb.Count;
+        if (menSame < 0.05) Console.WriteLine($"offset {i + lo:X} (signed {i + lo}) women={wv.Key} ({wv.Count()}/{women.Count}) men-same={menSame:P2}");
+    }
+    // bit-level
+    for (int i = 0; i < hi - lo; i++) for (int bit = 0; bit < 8; bit++)
+    {
+        double wf = wb.Count(b => (b[i] >> bit & 1) == 1) / (double)wb.Count, mf = mb.Count(b => (b[i] >> bit & 1) == 1) / (double)mb.Count;
+        if (Math.Abs(wf - mf) > 0.9) Console.WriteLine($"bit offset {i + lo} bit {bit}: women {wf:P0} men {mf:P1}");
+    }
+    return;
+}
 if (args.Length == 0 || args[0] == "report")
 {
     Report.Run(args.Length > 1 ? args[1..] : ["Haaland", "Bellingham", "Lamine Yamal", "Saka", "Verbruggen"]);
@@ -141,6 +175,8 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
 
 
 

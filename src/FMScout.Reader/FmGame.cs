@@ -21,7 +21,9 @@ public sealed record Player(
     int HeightCm,
     byte[] Positions,
     byte[] Attributes,
-    byte[] Personality);
+    byte[] Personality,
+    bool IsFemale,
+    string? CommonName);
 
 /// <summary>Read-only view of a running FM27 game's database.</summary>
 public sealed class FmGame : IDisposable
@@ -50,8 +52,10 @@ public sealed class FmGame : IDisposable
     }
 
     public static FmGame Attach(string layoutPath, string processName = "fm")
+        => Attach(LayoutFile.Load(layoutPath), processName);
+
+    public static FmGame Attach(Dictionary<string, BuildLayout> layouts, string processName = "fm")
     {
-        var layouts = LayoutFile.Load(layoutPath);
         var m = ProcessMemory.Attach(processName);
         var module = layouts.Values.First().Module;
         var build = DetectBuild(m.Process, module) ?? throw new InvalidOperationException($"{module} not loaded");
@@ -141,10 +145,14 @@ public sealed class FmGame : IDisposable
             block[Rel(PL.Height)],
             block.AsSpan(Rel(PL.Positions), L.PositionNames.Length).ToArray(),
             block.AsSpan(Rel(PL.Attributes), L.AttributeNames.Length).ToArray(),
-            Memory.ReadBytes(v + (ulong)P.Personality.Value, L.PersonalityNames.Length) ?? []);
+            Memory.ReadBytes(v + (ulong)P.Personality.Value, L.PersonalityNames.Length) ?? [],
+            (Memory.Read<byte>(v + (ulong)P.Flags.Value) >> P.FemaleBit & 1) == 1,
+            PL.CommonName.Value == 0 ? null : FmString(BitConverter.ToUInt64(block, Rel(PL.CommonName))));
     }
 
     public void Dispose() => Memory.Dispose();
 }
+
+
 
 

@@ -1,4 +1,10 @@
-# FM Scout: reader probe (step 2)
+# FM27 Scout
+
+**The app:** see [docs/app.md](docs/app.md). It is a WPF, single-file `FM27Scout.exe` with Players and Clubs tabs, role scores, filters, a query bar and saved searches.
+
+The rest of this README documents the memory reader and how the layout was found.
+
+## Reader probe (step 2)
 
 A read-only proof that we can read player data out of a running **Football Manager 27** process.
 
@@ -117,6 +123,7 @@ dotnet build -c Release
 src\FMScout.Probe\bin\Release\net10.0\FMScout.Probe.exe report Haaland Saka
 ```
 This needs FM27 running with a save loaded. It targets .NET 10 (the SDK installed here) on x64.
+
 
 
 

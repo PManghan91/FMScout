@@ -27,7 +27,9 @@
         "birthCity": "0x80",       // City* (city +0x18 = name)
         "dateOfBirth": "0x88",     // u16 day-of-year (1-based), u16 year
         "club": "0x108",           // a Club* that is NOT the current club (Haaland->Man City, Yamal->Barcelona Atletic); meaning unknown
-        "contract": "0xA8"         // Contract* for the current club (null if none)
+        "contract": "0xA8",        // Contract* for the current club (null if none)
+        "flags": "0x19",           // flag byte
+        "femaleBit": 4             // bit set = female (100% of women's-league players, 0.2% elsewhere)
       },
       "nation": { "name": "0x18", "code": "0x28", "nationality": "0x30" },
       "club": { "name": "0xC0", "shortName": "0xC8" },
@@ -46,6 +48,7 @@
         "height": "-0x5A",           // u8 cm
         "currentAbility": "-0x24",   // s16 1-200
         "potentialAbility": "-0x22", // s16 1-200 (negative = range, none seen in this save)
+        "commonName": "-0x198",      // FMString* known-as name, null if none (Yamal -> "Lamine Yamal")
         "value": "-0x54"             // u32 GBP. Inside UI range for Yamal, Urbig, Ortiz; Verbruggen 25.2M vs UI 19.5-25M; Haaland 300M (Not for Sale)
       },
 
@@ -69,6 +72,8 @@
     }
   }
 }
+
+
 
 
 

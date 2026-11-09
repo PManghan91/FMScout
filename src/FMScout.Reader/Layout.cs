@@ -37,6 +37,8 @@ public sealed class PersonLayout
     public Hex DateOfBirth { get; set; }
     public Hex Club { get; set; }
     public Hex Contract { get; set; }
+    public Hex Flags { get; set; }
+    public int FemaleBit { get; set; }
 }
 
 public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } }
@@ -55,6 +57,7 @@ public sealed class PlayerLayout
     public Hex CurrentAbility { get; set; }
     public Hex PotentialAbility { get; set; }
     public Hex Value { get; set; }
+    public Hex CommonName { get; set; }
 }
 
 [JsonConverter(typeof(HexConverter))]
@@ -85,11 +88,15 @@ public static class LayoutFile
 {
     private sealed class Root { public Dictionary<string, BuildLayout> Builds { get; set; } = new(); }
 
-    public static Dictionary<string, BuildLayout> Load(string path)
+    public static Dictionary<string, BuildLayout> Load(string path) => Parse(File.ReadAllText(path));
+
+    public static Dictionary<string, BuildLayout> Parse(string json)
     {
         var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip };
-        return JsonSerializer.Deserialize<Root>(File.ReadAllText(path), opts)!.Builds;
+        return JsonSerializer.Deserialize<Root>(json, opts)!.Builds;
     }
 }
+
+
 
 

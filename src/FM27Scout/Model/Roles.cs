@@ -1,0 +1,124 @@
+using System.IO;
+using System.Text.Json;
+
+namespace FM27Scout.Model;
+
+public sealed class RoleDef
+{
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string[] Positions { get; set; } = [];
+    public string[] Key { get; set; } = [];
+    public string[] Important { get; set; } = [];
+    public string[] Useful { get; set; } = [];
+
+    internal (int idx, double w)[] Weights = [];
+    internal int[] PosIdx = [];
+    public string Display => Code == "-" ? Name : $"{Name} ({Code})";
+    public override string ToString() => Display;
+}
+
+public sealed class FamiliarityRule { public int Min { get; set; } public double Factor { get; set; } }
+public sealed class AgeRule { public int MaxAge { get; set; } public double Factor { get; set; } }
+
+public sealed class RoleSet
+{
+    public Dictionary<string, double> Tiers { get; set; } = new() { ["key"] = 3, ["important"] = 2, ["useful"] = 1 };
+    public FamiliarityRule[] Familiarity { get; set; } = [];
+    public AgeRule[] PotentialAge { get; set; } = [];
+    public RoleDef[] Roles { get; set; } = [];
+    public string? SourcePath { get; private set; }
+
+    static readonly JsonSerializerOptions Opts = new() { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
+
+    /// <summary>Loads %APPDATA%\FM27Scout\roles.json, creating it from the built-in defaults on first run.</summary>
+    public static RoleSet LoadUserOrDefault()
+    {
+        var path = Path.Combine(AppPaths.Data, "roles.json");
+        if (!File.Exists(path)) File.WriteAllText(path, Embedded.Read("roles.json"));
+        RoleSet set;
+        try { set = JsonSerializer.Deserialize<RoleSet>(File.ReadAllText(path), Opts)!; }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"roles.json could not be read ({ex.Message}). Using built-in defaults.", "FM27 Scout");
+            set = JsonSerializer.Deserialize<RoleSet>(Embedded.Read("roles.json"), Opts)!;
+        }
+        set.SourcePath = path;
+        set.Compile();
+        return set;
+    }
+
+    void Compile()
+    {
+        double T(string k) => Tiers.TryGetValue(k, out var v) ? v : 1;
+        foreach (var r in Roles)
+        {
+            var w = new Dictionary<int, double>();
+            void AddAll(string[] names, double weight)
+            {
+                foreach (var n in names) { int i = Attr.Index(n); if (i >= 0) w[i] = Math.Max(w.GetValueOrDefault(i), weight); }
+            }
+            AddAll(r.Useful, T("useful")); AddAll(r.Important, T("important")); AddAll(r.Key, T("key"));
+            r.Weights = w.Select(kv => (kv.Key, kv.Value)).ToArray();
+            r.PosIdx = r.Positions.Select(Model.Positions.Index).Where(i => i >= 0).ToArray();
+        }
+    }
+
+    public double Familiarity01(int rating)
+    {
+        foreach (var f in Familiarity.OrderByDescending(f => f.Min)) if (rating >= f.Min) return f.Factor;
+        return 0.5;
+    }
+
+    /// <summary>0-100. attrs = 1-20 scale.</summary>
+    public double Score(RoleDef r, int[] attrs, byte[] positions)
+    {
+        double s = 0, tw = 0;
+        foreach (var (i, w) in r.Weights) { s += w * attrs[i]; tw += w; }
+        if (tw == 0) return 0;
+        int fam = r.PosIdx.Length == 0 ? 20 : r.PosIdx.Max(i => (int)positions[i]);
+        return s / tw * 5 * Familiarity01(fam);
+    }
+
+    /// <summary>
+    /// Potential estimate: assume every attribute grows towards 20 in proportion to the player's
+    /// remaining ability headroom ((PA-CA)/(200-CA)), damped by age (see potentialAge in roles.json).
+    /// This is our own heuristic - FM does not store "future attributes".
+    /// </summary>
+    public double AgeFactor(int? age)
+    {
+        if (age is not int a || PotentialAge.Length == 0) return 1;
+        foreach (var r in PotentialAge.OrderBy(r => r.MaxAge)) if (a <= r.MaxAge) return r.Factor;
+        return 0;
+    }
+
+    public double PotentialScore(RoleDef r, int[] attrs, byte[] positions, int ca, int pa, int? age)
+    {
+        double growth = pa <= ca || ca >= 200 ? 0 : (pa - ca) / (double)(200 - ca) * AgeFactor(age);
+        if (growth <= 0) return Score(r, attrs, positions);
+        double s = 0, tw = 0;
+        foreach (var (i, w) in r.Weights) { s += w * (attrs[i] + (20 - attrs[i]) * growth); tw += w; }
+        int fam = r.PosIdx.Length == 0 ? 20 : r.PosIdx.Max(i => (int)positions[i]);
+        return tw == 0 ? 0 : s / tw * 5 * Familiarity01(fam);
+    }
+
+    public void Apply(PlayerRow p)
+    {
+        var sc = new double[Roles.Length];
+        var pot = new double[Roles.Length];
+        int best = -1;
+        for (int i = 0; i < Roles.Length; i++)
+        {
+            sc[i] = Score(Roles[i], p.A, p.Positions);
+            pot[i] = PotentialScore(Roles[i], p.A, p.Positions, p.CA, p.PA, p.Age);
+            if (best < 0 || sc[i] > sc[best]) best = i;
+        }
+        p.RoleScores = sc; p.PotentialRoleScores = pot;
+        if (best >= 0) { p.BestRole = Roles[best].Name; p.BestRoleScore = sc[best]; p.BestPotentialScore = pot.Max(); }
+    }
+
+    public int IndexOf(string codeOrName) => Array.FindIndex(Roles, r =>
+        r.Code.Equals(codeOrName, StringComparison.OrdinalIgnoreCase) || r.Name.Equals(codeOrName, StringComparison.OrdinalIgnoreCase));
+}
+
+
