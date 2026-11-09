@@ -27,6 +27,16 @@ public sealed class PlayerRow
     public int RightFoot => A[Attr.RightFoot];
     public string Foot => LeftFoot >= 18 && RightFoot >= 18 ? "Either" : LeftFoot > RightFoot ? "Left" : "Right";
     public bool IsGoalkeeper => Source.Positions[0] >= 15;
+    public int CurrentRep => Source.CurrentReputation;
+    public int HomeRep => Source.HomeReputation;
+    public int WorldRep => Source.WorldReputation;
+    public int ClubRep => Source.ClubReputation;
+    public string SquadStatusName { get; init; } = "";
+
+    /// <summary>"Would join" estimate 0-100 for the selected club (-1 = already ours).</summary>
+    public double Join { get; set; }
+    public string JoinLabel { get; set; } = "";
+    public List<string> JoinReasons { get; set; } = [];
 
     /// <summary>Attributes on the FM 1-20 scale (index = layout attribute order).</summary>
     public required int[] A { get; init; }
@@ -79,4 +89,5 @@ public static class Attr
     public static readonly string[] Goalkeeping = ["AerialReach", "CommandOfArea", "Communication", "Eccentricity", "FirstTouch", "Handling", "Kicking", "OneOnOnes", "Passing", "Punching", "Reflexes", "RushingOut", "Throwing"];
     public static readonly string[] Hidden = ["Consistency", "Dirtiness", "ImportantMatches", "InjuryProneness", "Versatility"];
 }
+
 

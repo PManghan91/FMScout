@@ -22,6 +22,9 @@ public partial class MainWindow : Window
     }
 
     RoleSet _roles = null!;
+    JoinModel _join = null!;
+    List<MyClub> _myClubs = [];
+    DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
     List<PlayerRow> _all = [];
     List<PlayerRow> _view = [];
     readonly List<ColumnSpec> _cols = [];
@@ -43,6 +46,7 @@ public partial class MainWindow : Window
         Attr.Init(first.AttributeNames);
         Model.Positions.Names = first.PositionNames;
         _roles = RoleSet.LoadUserOrDefault();
+        _join = JoinModel.LoadUserOrDefault();
 
         BuildSidebar();
         BuildColumns();
@@ -118,7 +122,7 @@ public partial class MainWindow : Window
             PositionMin = FPosMin.SelectedIndex switch { 0 => 20, 2 => 10, 3 => 5, _ => 15 },
             Role = role is { Code: not "-" } ? role.Code : null, RoleMin = D(FRoleMin), RolePotentialMin = D(FRolePotMin),
             Club = S(FClub), League = S(FLeague), ValueMax = S(FValueMax), WageMax = S(FWageMax), ContractExpiresBy = I(FContract),
-            FreeAgentsOnly = FFree.IsChecked == true,
+            FreeAgentsOnly = FFree.IsChecked == true, GettableOnly = FGettable.IsChecked == true,
             AttributeMin = _attrBoxes.Where(kv => int.TryParse(kv.Value.Text, out var v) && v > 0).ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value.Text)),
             Query = QueryBox.Text.Trim(),
         };
@@ -135,7 +139,7 @@ public partial class MainWindow : Window
         FRole.SelectedIndex = ri + 1;
         FRoleMin.Text = f.RoleMin?.ToString() ?? ""; FRolePotMin.Text = f.RolePotentialMin?.ToString() ?? "";
         FClub.Text = f.Club ?? ""; FLeague.Text = f.League ?? ""; FValueMax.Text = f.ValueMax ?? ""; FWageMax.Text = f.WageMax ?? "";
-        FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly;
+        FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly; FGettable.IsChecked = f.GettableOnly;
         foreach (var (k, tb) in _attrBoxes) tb.Text = f.AttributeMin.TryGetValue(k, out var v) ? v.ToString() : "";
         QueryBox.Text = f.Query;
     }
@@ -219,6 +223,14 @@ public partial class MainWindow : Window
         Text("bestpot", "Pot.", "Roles", nameof(PlayerRow.BestPotentialScore), p => p.BestPotentialScore, fmt: "F0", style: scoreStyle, fg: new ScoreBrush());
         _roleCol = Text("role", "Role", "Roles", nameof(PlayerRow.SelectedRoleScore), p => p.SelectedRoleScore, visible: false, fmt: "F0", style: scoreStyle, fg: new ScoreBrush());
         _rolePotCol = Text("rolepot", "Pot. role", "Roles", nameof(PlayerRow.SelectedPotentialScore), p => p.SelectedPotentialScore, visible: false, fmt: "F0", style: scoreStyle, fg: new ScoreBrush());
+        Text("join", "Join %", "Would join", nameof(PlayerRow.Join), p => p.Join, fmt: "F0", style: scoreStyle, fg: new ScoreBrush())
+            .HeaderStyle = HeaderTip("Estimated chance he would join your club (0-100). See the profile for reasons.");
+        Text("joinlabel", "Would join?", "Would join", nameof(PlayerRow.JoinLabel), p => p.Join, width: 95);
+        Text("status", "Squad status", "Club & contract", nameof(PlayerRow.SquadStatusName), p => p.SquadStatusName, visible: false, width: 120);
+        Text("rep", "Rep", "Reputation", nameof(PlayerRow.CurrentRep), p => p.CurrentRep, visible: false, style: scoreStyle);
+        Text("hrep", "Home rep", "Reputation", nameof(PlayerRow.HomeRep), p => p.HomeRep, visible: false, style: scoreStyle);
+        Text("wrep", "World rep", "Reputation", nameof(PlayerRow.WorldRep), p => p.WorldRep, visible: false, style: scoreStyle);
+        Text("clubrep", "Club rep", "Reputation", nameof(PlayerRow.ClubRep), p => p.ClubRep, visible: false, style: scoreStyle);
         Text("value", "Value", "Club & contract", nameof(PlayerRow.Value), p => p.Value, conv: new MoneyText(), style: scoreStyle);
         Text("wage", "Wage p/w", "Club & contract", nameof(PlayerRow.Wage), p => p.Wage, conv: new MoneyText(), style: scoreStyle);
         Text("expiry", "Expires", "Club & contract", nameof(PlayerRow.ContractExpiry), p => p.ContractExpiry, fmt: "dd/MM/yyyy");
@@ -339,10 +351,12 @@ public partial class MainWindow : Window
         {
             _roles = RoleSet.LoadUserOrDefault(); // pick up edited weights on every load
             var roles = _roles;
+            _join = JoinModel.LoadUserOrDefault();
             var res = await Task.Run(() => GameLoader.Load(roles, progress));
             _all = res.Players;
+            AfterLoad(res);
             StatusText.Text = $"FM27 build {res.Build} · game date {res.GameDate:dd/MM/yyyy} · {res.PeopleInDb:N0} people in DB · " +
-                              $"{_all.Count:N0} men's players loaded ({res.ExcludedWomen:N0} women's excluded) in {res.Millis / 1000.0:F1}s · layout: {res.LayoutSource}";
+                              $"{_all.Count:N0} men's players loaded ({res.ExcludedWomen:N0} women's excluded) in {res.Millis / 1000.0:F1}s · your club: {(res.HumanClubs.Count > 0 ? string.Join(", ", res.HumanClubs) : "not detected")} · layout: {res.LayoutSource}";
             if (_sortCol == null) { _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending; }
             ApplyFilters();
             BuildClubs();
@@ -365,6 +379,7 @@ public partial class MainWindow : Window
     {
         var res = GameLoader.Load(_roles);
         _all = res.Players;
+        AfterLoad(res);
         _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending;
         ApplyFilters();
         BuildClubs();
@@ -388,7 +403,56 @@ public partial class MainWindow : Window
         return $"{p.Name}: {p.PositionsText} | {p.Club} ({p.League}) | value {MoneyText.Format(p.Value)} wage {MoneyText.Format(p.Wage)} | roles {string.Join(", ", top)}";
     }
 
+    internal string SelfTestJoin()
+    {
+        var my = MyClubCombo.SelectedItem as MyClub;
+        var sb = new System.Text.StringBuilder($"My club: {my} rep {my?.Reputation} top wage {my?.TopWage} squad value {my?.SquadValue}\n");
+        foreach (var g in _all.GroupBy(p => p.JoinLabel)) sb.AppendLine($"  {g.Key}: {g.Count():N0}");
+        foreach (var n in new[] { "Haaland", "Jacob Greaves" })
+        {
+            var p = _all.Where(x => x.Name.Contains(n)).OrderByDescending(x => x.CA).FirstOrDefault();
+            if (p != null) sb.AppendLine($"  {p.Name} ({p.Club}): {p.JoinLabel} {p.Join:F0} | " + string.Join(" | ", p.JoinReasons));
+        }
+        foreach (var p in _all.Where(x => x.Join >= 60 && x.CA >= 120).OrderByDescending(x => x.CA).Take(5))
+            sb.AppendLine($"  {p.Name} ({p.Age}, {p.Club}, CA {p.CA}, rep {p.CurrentRep}): {p.JoinLabel} {p.Join:F0} | " + string.Join(" | ", p.JoinReasons.Take(5)));
+        return sb.ToString();
+    }
+
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; ShowProfile(_view[i]); } }
+
+    // ------------------------------------------------------------------ my club / join estimate
+    string? _savedMyClub;
+
+    void AfterLoad(LoadResult res)
+    {
+        _today = res.GameDate ?? _today;
+        var clubs = _all.Where(p => p.Source.Club != null).GroupBy(p => p.Club)
+            .Select(g => new MyClub(g.Key, g.Max(p => p.ClubRep), g.Max(p => p.Wage), g.Sum(p => p.Value), g.Count())).ToList();
+        _myClubs = clubs.Where(c => res.HumanClubs.Contains(c.Name))
+            .Concat(clubs.Where(c => !res.HumanClubs.Contains(c.Name)).OrderBy(c => c.Name)).ToList();
+        var pick = _myClubs.FirstOrDefault(c => c.Name == _savedMyClub) ?? _myClubs.FirstOrDefault(c => res.HumanClubs.Contains(c.Name)) ?? _myClubs.FirstOrDefault();
+        _suppressMyClub = true;
+        MyClubCombo.ItemsSource = _myClubs;
+        MyClubCombo.SelectedItem = pick;
+        _suppressMyClub = false;
+        EvaluateJoin();
+    }
+
+    bool _suppressMyClub;
+    void MyClub_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressMyClub || MyClubCombo.SelectedItem is not MyClub) return;
+        _savedMyClub = ((MyClub)MyClubCombo.SelectedItem).Name;
+        EvaluateJoin();
+        ApplyFilters();
+        if (PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
+    }
+
+    void EvaluateJoin()
+    {
+        if (MyClubCombo.SelectedItem is not MyClub my) return;
+        foreach (var p in _all) _join.Evaluate(p, my, _today);
+    }
 
     // ------------------------------------------------------------------ profile
     void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -421,6 +485,8 @@ public partial class MainWindow : Window
         Fact("Expires", p.ContractExpiry?.ToString("dd/MM/yyyy") ?? "-");
         Fact("Height", $"{p.Height} cm");
         Fact("Feet", $"L {p.LeftFoot} / R {p.RightFoot}");
+        Fact("Reputation", $"{p.CurrentRep:N0}");
+        if (p.SquadStatusName.Length > 0) Fact("Status", p.SquadStatusName);
         Profile.Children.Add(facts);
 
         // attribute columns, FM style
@@ -457,6 +523,23 @@ public partial class MainWindow : Window
         Grid.SetColumn(mid, 1); Grid.SetColumn(right, 2);
         cols.Children.Add(left); cols.Children.Add(mid); cols.Children.Add(right);
         Profile.Children.Add(cols);
+
+        // would join?
+        if (MyClubCombo.SelectedItem is MyClub my)
+        {
+            var box = new Border { Background = (Brush)FindResource("Panel2"), CornerRadius = new CornerRadius(4), Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 4, 0, 10) };
+            var sp = new StackPanel();
+            var head = new DockPanel();
+            var lbl = T(p.Join < 0 ? p.JoinLabel : $"{p.JoinLabel}  {p.Join:F0}%", 14, true, p.Join < 0 ? muted : ScoreBrush.For(p.Join + 15));
+            DockPanel.SetDock(lbl, Dock.Right);
+            head.Children.Add(lbl);
+            head.Children.Add(T($"Would he join {my.Name}?", 12.5, true));
+            sp.Children.Add(head);
+            foreach (var r in p.JoinReasons) sp.Children.Add(T(r, 11.5, fg: r.StartsWith('-') ? AttrBrush.Mid : r.StartsWith('+') ? AttrBrush.Good : muted));
+            sp.Children.Add(T("Estimate only. FM decides when you approach him.", 10.5, fg: muted));
+            box.Child = sp;
+            Profile.Children.Add(box);
+        }
 
         // top roles
         Profile.Children.Add(T("Best roles   (score · potential)", 11.5, true, muted));
@@ -574,6 +657,7 @@ public partial class MainWindow : Window
     {
         public Dictionary<string, bool> Columns { get; set; } = new();
         public List<string> Order { get; set; } = [];
+        public string? MyClub { get; set; }
     }
 
     void LoadSettings()
@@ -583,6 +667,7 @@ public partial class MainWindow : Window
             if (!File.Exists(SettingsPath)) return;
             var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath));
             if (s == null) return;
+            _savedMyClub = s.MyClub;
             foreach (var c in _cols) if (c.Key is not ("role" or "rolepot") && s.Columns.TryGetValue(c.Key, out var vis)) c.Column.Visibility = vis ? Visibility.Visible : Visibility.Collapsed;
             for (int i = 0; i < s.Order.Count; i++)
             {
@@ -601,10 +686,13 @@ public partial class MainWindow : Window
             {
                 Columns = _cols.Where(c => c.Key is not ("role" or "rolepot")).ToDictionary(c => c.Key, c => c.Column.Visibility == Visibility.Visible),
                 Order = _cols.OrderBy(c => c.Column.DisplayIndex).Select(c => c.Key).ToList(),
+                MyClub = _savedMyClub,
             };
             File.WriteAllText(SettingsPath, JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch { }
     }
 }
+
+
 

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -32,13 +32,14 @@ public partial class App : Application
         var res = w.SelfTestLoad();
         log.WriteLine($"build {res.Build} date {res.GameDate} people {res.PeopleInDb} players {res.Players.Count} women excluded {res.ExcludedWomen} in {res.Millis} ms");
 
-        foreach (var q in new[] { "", "age<=21 pa>=170", "pos:ST poa>=75", "league:\"Premier League\" value<=20m age<=23", "gk ca>=160", "free pa>=140", "pot.bpcb>=80 age<=20", "haaland", "bad>>query" })
+        foreach (var q in new[] { "", "age<=21 pa>=170", "pos:ST poa>=75", "league:\"Premier League\" value<=20m age<=23", "gk ca>=160", "free pa>=140", "pot.bpcb>=80 age<=20", "haaland", "join>=70 ca>=120", "pos:ST join>=50 ca>=110", "free join>=60 ca>=100", "bad>>query" })
         {
             var r = w.SelfTestQuery(q);
             log.WriteLine($"query [{q}] -> {r}");
         }
         log.WriteLine(w.SelfTestSample("Haaland"));
         log.WriteLine(w.SelfTestSample("Lamine Yamal"));
+        log.WriteLine(w.SelfTestJoin());
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
@@ -65,3 +66,4 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+

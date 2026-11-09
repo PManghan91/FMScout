@@ -27,6 +27,19 @@
 * **Profile panel:** FM-style Technical (or Goalkeeping), Mental and Physical columns, hidden attributes, best roles with score and potential, position ratings, and the contract.
 * It shows the **true** values even where the game only shows scouting ranges.
 
+### Would he join us? (estimate)
+* **My club** is detected automatically from the game. The human manager has his own person class (`humanManagerVtableRva`), and his contract leads to his team and club. You can pick another club from the drop-down.
+* The **Join %** and **Would join?** columns show Likely (70+), Possible (50+), Unlikely (30+) or Very unlikely.
+* The sidebar has a **Gettable for us** checkbox, and you can query with `join>=60` or `willing:likely`.
+* The profile lists every factor that applied, with its points:
+  * the player's reputation vs your club's (softened for older players)
+  * stepping down from his current club
+  * free agent, or contract ending within 6 or 12 months
+  * squad status (fringe players are easier)
+  * wage vs your top earner, and value vs your squad value (a stand-in until club finances are read)
+* All the weights are in `%APPDATA%\FM27Scout\join.json`.
+* **Not included yet:** ambition and loyalty (the personality order isn't mapped), favourite and disliked clubs and people, real transfer and wage budgets, and work permits. FM decides for real only when you approach a player, so treat this as a guide.
+
 ### Clubs tab
 Squads built from the loaded players: player count, average and best CA, average PA, average age, squad value, wage bill and best player. Double-click a club to list its players.
 
@@ -55,3 +68,4 @@ On an unknown engine build, the app says so and doesn't load. Put an updated `fm
 dotnet publish src/FM27Scout -c Release -o publish      # -> publish\FM27Scout.exe
 publish\FM27Scout.exe --selftest <dir>                  # headless check: loads, runs queries, renders selftest-players.png
 ```
+

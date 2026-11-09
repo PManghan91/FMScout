@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\FMScout.Reader\FMScout.Reader.csproj" />
@@ -27,6 +27,8 @@
     <!-- Built-in defaults. A file with the same name next to the exe overrides them (quick patching). -->
     <EmbeddedResource Include="..\..\fm27-layout.json" Link="fm27-layout.json" LogicalName="fm27-layout.json" />
     <EmbeddedResource Include="roles.json" LogicalName="roles.json" />
+    <EmbeddedResource Include="join.json" LogicalName="join.json" />
   </ItemGroup>
 
 </Project>
+

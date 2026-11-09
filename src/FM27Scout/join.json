@@ -1,0 +1,38 @@
+{
+  // "Would they join us?" – FM27 Scout's own ESTIMATE. FM decides this on the fly when you approach a player;
+  // there is no stored "willing" flag. Edit freely: the app copies this file to %APPDATA%\FM27Scout\join.json.
+  //
+  // join = base + sum of the points below, clamped to 0-100. Every factor that applies is listed in the profile.
+  "base": 50,
+
+  // Player's current reputation (0-10000) vs your club's reputation (0-10000). FM's biggest factor.
+  // Above you: lose 1 point per "pointsPer" reputation, at most maxPenalty. Below you: gain 1 point per "bonusPer", at most maxBonus.
+  "playerReputation": { "pointsPer": 35, "maxPenalty": 65, "bonusPer": 150, "maxBonus": 12 },
+
+  // Stepping down from a bigger club (player's current club reputation vs yours).
+  "clubStep": { "pointsPer": 70, "maxPenalty": 30, "bonusPer": 200, "maxBonus": 10 },
+
+  // Older players accept a step down more easily: reputation/club-step penalties are multiplied by this factor.
+  "agePenaltyFactor": [
+    { "minAge": 34, "factor": 0.35 },
+    { "minAge": 31, "factor": 0.6 },
+    { "minAge": 0,  "factor": 1.0 }
+  ],
+
+  "contract": { "freeAgent": 22, "within6Months": 14, "within12Months": 7 },
+
+  // contract.squadStatus code -> points (fringe players are easier to prise away).
+  "squadStatus": { "1": -12, "2": -7, "3": 0, "4": 6, "5": 10, "7": 8, "9": 6, "14": 10, "16": 6, "20": 8, "21": 6, "22": 6, "17": 4 },
+
+  // Affordability (proxy until club finances are mapped): compared with your highest-paid player and your squad value.
+  "wage": { "overTopEarnerFactor": 1.3, "overTopEarnerPoints": -15, "wayOverFactor": 3.0, "wayOverPoints": -40, "withinTopEarnerPoints": 4 },
+  "fee":  { "overSquadValueShare": 0.25, "points": -20 },
+
+  "labels": [
+    { "min": 70, "label": "Likely" },
+    { "min": 50, "label": "Possible" },
+    { "min": 30, "label": "Unlikely" },
+    { "min": 0,  "label": "Very unlikely" }
+  ]
+}
+

@@ -14,6 +14,7 @@ public sealed class LoadResult
     public int ExcludedWomen { get; init; }
     public long Millis { get; init; }
     public string LayoutSource { get; init; } = "";
+    public List<string> HumanClubs { get; init; } = [];
 }
 
 public sealed class UserFacingException(string msg) : Exception(msg);
@@ -58,6 +59,7 @@ public static class GameLoader
             var today = game.GameDate ?? DateOnly.FromDateTime(DateTime.Today);
 
             progress?.Report("Reading the player list…");
+            var humans = game.HumanClubs().Select(c => c.Name).ToList();
             var persons = game.PersonPointers();
             var ptrs = persons.Where(game.IsPlayer).ToArray();
 
@@ -77,6 +79,7 @@ public static class GameLoader
                     A = a,
                     Age = p.DateOfBirth is { } d ? today.Year - d.Year - (today.DayOfYear < d.DayOfYear ? 1 : 0) : null,
                     PositionsText = Positions.Describe(p.Positions),
+                    SquadStatusName = p.Club == null ? "" : game.Layout.SquadStatusNames.TryGetValue(p.SquadStatus.ToString(), out var sn) ? sn : $"Status {p.SquadStatus}",
                 };
                 roles.Apply(row);
                 rows.Add(row);
@@ -84,8 +87,9 @@ public static class GameLoader
             return new LoadResult
             {
                 Players = rows, Build = game.BuildKey, GameDate = game.GameDate, PeopleInDb = persons.Length,
-                ExcludedWomen = women, Millis = sw.ElapsedMilliseconds, LayoutSource = src
+                ExcludedWomen = women, Millis = sw.ElapsedMilliseconds, LayoutSource = src, HumanClubs = humans
             };
         }
     }
 }
+

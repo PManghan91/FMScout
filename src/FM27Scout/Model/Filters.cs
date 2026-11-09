@@ -30,6 +30,8 @@ public sealed class FilterState
     public string? WageMax { get; set; }
     public int? ContractExpiresBy { get; set; }
     public bool FreeAgentsOnly { get; set; }
+    public bool GettableOnly { get; set; }
+    public double GettableMin { get; set; } = 50;
 
     public Dictionary<string, int> AttributeMin { get; set; } = new();
     public string Query { get; set; } = "";
@@ -64,6 +66,7 @@ public sealed class QueryError(string msg) : Exception(msg);
 ///   age&lt;=21 pa&gt;=150 pos:ST pos:D,DM league:"Premier League" club:arsenal nation:brazil
 ///   value&lt;=20m wage&lt;50k finishing&gt;=15 poa&gt;=70 (role code = role score) pot.poa&gt;=80 best&gt;=75
 ///   contract&lt;=2037 foot:left gk   (bare words match the name)
+///   join&gt;=60 rep&lt;=6000 wrep&gt;=3000 status:"Squad Player" willing:likely
 /// </summary>
 public static class FilterBuilder
 {
@@ -104,6 +107,7 @@ public static class FilterBuilder
         if (Has(f.WageMax)) { var v = Money(f.WageMax!); preds.Add(p => p.Wage <= v); }
         if (f.ContractExpiresBy is int y) preds.Add(p => p.ContractExpiry is { } d && d.Year <= y);
         if (f.FreeAgentsOnly) preds.Add(p => p.Source.Club == null);
+        if (f.GettableOnly) { var gm = f.GettableMin; preds.Add(p => p.Join >= gm); }
 
         foreach (var (name, min) in f.AttributeMin)
         {
@@ -142,7 +146,8 @@ public static class FilterBuilder
         Func<PlayerRow, string?>? text = field switch
         {
             "name" => p => p.Name + " " + p.FullName, "club" => p => p.Club, "league" or "comp" => p => p.League,
-            "nation" or "nat" => p => p.Nation, "foot" => p => p.Foot, _ => null
+            "nation" or "nat" => p => p.Nation, "foot" => p => p.Foot, "status" => p => p.SquadStatusName,
+            "joinlabel" or "willing" => p => p.JoinLabel, _ => null
         };
         if (text != null)
         {
@@ -162,7 +167,8 @@ public static class FilterBuilder
         {
             "age" => p => p.Age ?? 0, "ca" => p => p.CA, "pa" => p => p.PA, "height" => p => p.Height,
             "value" => p => p.Value, "wage" => p => p.Wage, "best" => p => p.BestRoleScore, "pot" or "potbest" => p => p.BestPotentialScore,
-            "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, _ => null
+            "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, "join" => p => p.Join,
+            "rep" => p => p.CurrentRep, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
         };
         if (num == null)
         {
@@ -201,4 +207,5 @@ public static class FilterBuilder
     static bool Contains(string? hay, string needle) =>
         hay != null && CultureInfo.InvariantCulture.CompareInfo.IndexOf(hay, needle, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
 }
+
 

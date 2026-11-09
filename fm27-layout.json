@@ -15,7 +15,16 @@
         "vectorEnd": "0x140"
       },
       "gameDateRva": "0x5706018", // confirmed: current in-game date (Wed 4/2/2037 = day 35); u16 day in low 9 bits, u16 year
-      "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player
+      "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player (~140k)
+      // A second player class (~2.9k, e.g. Jacob Greaves): same person fields, player block 0xF8 bytes further back.
+      "extraPlayerClasses": [ { "vtableRva": "0x4F77F38", "shift": "-0xF8" } ],
+      "humanManagerVtableRva": "0x4CC28D8", // human manager(s): e.g. "Paul Manghan"; club via person.contract -> team -> club
+      // contract.squadStatus values. Confirmed against UI: 2, 3, 17. Others inferred from who has them.
+      "squadStatusNames": {
+        "1": "Star Player", "2": "Important Player", "3": "Regular Starter", "4": "Squad Player", "5": "Fringe Player?",
+        "7": "Backup?", "10": "Hot Prospect?", "11": "Breakthrough Prospect?", "13": "Youngster?", "15": "First-Choice GK?",
+        "17": "Domestic Cup Goalkeeper", "20": "Backup GK?"
+      },
 
       "person": {
         "uid": "0xC",              // u32 FM unique ID (Haaland = 29179241)
@@ -32,12 +41,13 @@
         "femaleBit": 4             // bit set = female (100% of women's-league players, 0.2% elsewhere)
       },
       "nation": { "name": "0x18", "code": "0x28", "nationality": "0x30" },
-      "club": { "name": "0xC0", "shortName": "0xC8" },
+      "club": { "name": "0xC0", "shortName": "0xC8", "reputation": "0x168" }, // reputation u16 0-10000 (Real Madrid 9750, Bristol Rovers 5750)
       "contract": {
         "team": "0x10",          // Team* (first team / B team etc.)
         "weeklyWage": "0x20",    // u32, GBP per week (inside UI wage range for all 3 test players)
         "startDate": "0x44",     // date (day field has flags in upper bits)
-        "expiryDate": "0x48"     // date, confirmed (30/6/2038, 30/6/2037, 30/6/2040)
+        "expiryDate": "0x48",    // date, confirmed (30/6/2038, 30/6/2037, 30/6/2040)
+        "squadStatus": "0x54"    // u8, see squadStatusNames
       },
       "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48" },
 
@@ -48,7 +58,10 @@
         "height": "-0x5A",           // u8 cm
         "currentAbility": "-0x24",   // s16 1-200
         "potentialAbility": "-0x22", // s16 1-200 (negative = range, none seen in this save)
-        "commonName": "-0x198",      // FMString* known-as name, null if none (Yamal -> "Lamine Yamal")
+        "commonName": "-0x198",
+        "homeReputation": "-0x2A",   // u16 0-10000 (likely: Bristol Rovers players ~5000)
+        "currentReputation": "-0x28",// u16 0-10000
+        "worldReputation": "-0x26",  // u16 0-10000 (Haaland 9852, Bristol Rovers players ~2500)      // FMString* known-as name, null if none (Yamal -> "Lamine Yamal")
         "value": "-0x54"             // u32 GBP. Inside UI range for Yamal, Urbig, Ortiz; Verbruggen 25.2M vs UI 19.5-25M; Haaland 300M (Not for Sale)
       },
 
@@ -72,6 +85,7 @@
     }
   }
 }
+
 
 
 

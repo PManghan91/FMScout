@@ -23,7 +23,15 @@ public sealed record Player(
     byte[] Attributes,
     byte[] Personality,
     bool IsFemale,
-    string? CommonName);
+    string? CommonName,
+    int HomeReputation,
+    int CurrentReputation,
+    int WorldReputation,
+    int SquadStatus,
+    ulong ClubAddress,
+    int ClubReputation);
+
+public sealed record ClubInfo(ulong Address, string Name, int Reputation);
 
 /// <summary>Read-only view of a running FM27 game's database.</summary>
 public sealed class FmGame : IDisposable
@@ -32,13 +40,14 @@ public sealed class FmGame : IDisposable
     public BuildLayout Layout { get; }
     public string BuildKey { get; }
     public ulong ModuleBase { get; }
-    private readonly ulong _playerVtable;
+    private readonly Dictionary<ulong, long> _playerShift = new();
     private readonly int _blockLen;
 
     private FmGame(ProcessMemory m, BuildLayout layout, string key, ulong moduleBase)
     {
         Memory = m; Layout = layout; BuildKey = key; ModuleBase = moduleBase;
-        _playerVtable = moduleBase + (ulong)layout.PlayerVtableRva.Value;
+        _playerShift[moduleBase + (ulong)layout.PlayerVtableRva.Value] = 0;
+        foreach (var pc in layout.ExtraPlayerClasses) _playerShift[moduleBase + (ulong)pc.VtableRva.Value] = pc.Shift.Value;
         _blockLen = (int)(-layout.Player.BlockStart.Value) + 0x10;
     }
 
@@ -81,7 +90,32 @@ public sealed class FmGame : IDisposable
         return res;
     }
 
-    public bool IsPlayer(ulong person) => Memory.ReadPtr(person) == _playerVtable;
+    public bool IsPlayer(ulong person) => _playerShift.ContainsKey(Memory.ReadPtr(person));
+
+    public ClubInfo? ReadClub(ulong club)
+    {
+        if (club < 0x10000) return null;
+        var name = FmString(Memory.ReadPtr(club + (ulong)Layout.Club.Name.Value));
+        return name == null ? null : new ClubInfo(club, name, Memory.Read<ushort>(club + (ulong)Layout.Club.Reputation.Value));
+    }
+
+    /// <summary>Club(s) managed by human players (person class = human manager, via their contract).</summary>
+    public List<ClubInfo> HumanClubs()
+    {
+        var vt = ModuleBase + (ulong)Layout.HumanManagerVtableRva.Value;
+        var res = new List<ClubInfo>();
+        foreach (var v in PersonPointers())
+        {
+            if (Memory.ReadPtr(v) != vt) continue;
+            ulong contract = Memory.ReadPtr(v + (ulong)Layout.Person.Contract.Value);
+            if (contract < 0x10000) continue;
+            ulong team = Memory.ReadPtr(contract + (ulong)Layout.Contract.Team.Value);
+            if (team < 0x10000) continue;
+            var c = ReadClub(Memory.ReadPtr(team + (ulong)Layout.Team.Club.Value));
+            if (c != null && !res.Any(x => x.Address == c.Address)) res.Add(c);
+        }
+        return res;
+    }
 
     public IEnumerable<ulong> PlayerPointers() => PersonPointers().Where(IsPlayer);
 
@@ -105,7 +139,7 @@ public sealed class FmGame : IDisposable
     {
         ushort raw = Memory.Read<ushort>(a), year = Memory.Read<ushort>(a + 2);
         int day = raw & 0x1FF; // upper bits are used for other data on some dates
-        if (year < 1900 || year > 2200 || day < 1 || day > 366) return null;
+        if (year <= 1900 || year > 2200 || day < 1 || day > 366) return null; // 1/1/1900 = "no date"
         return DateOnly.FromDateTime(new DateTime(year, 1, 1).AddDays(day - 1));
     }
 
@@ -123,7 +157,8 @@ public sealed class FmGame : IDisposable
         ulong comp = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Competition.Value);
 
         // One read for the whole player block that sits before the person pointer.
-        ulong blockStart = v - (ulong)(-PL.BlockStart.Value);
+        long shift = _playerShift.GetValueOrDefault(Memory.ReadPtr(v));
+        ulong blockStart = (ulong)((long)v + PL.BlockStart.Value + shift);
         var block = Memory.ReadBytes(blockStart, _blockLen) ?? new byte[_blockLen];
         int Rel(long off) => (int)(off - PL.BlockStart.Value);
 
@@ -147,11 +182,19 @@ public sealed class FmGame : IDisposable
             block.AsSpan(Rel(PL.Attributes), L.AttributeNames.Length).ToArray(),
             Memory.ReadBytes(v + (ulong)P.Personality.Value, L.PersonalityNames.Length) ?? [],
             (Memory.Read<byte>(v + (ulong)P.Flags.Value) >> P.FemaleBit & 1) == 1,
-            PL.CommonName.Value == 0 ? null : FmString(BitConverter.ToUInt64(block, Rel(PL.CommonName))));
+            PL.CommonName.Value == 0 ? null : FmString(BitConverter.ToUInt64(block, Rel(PL.CommonName))),
+            BitConverter.ToUInt16(block, Rel(PL.HomeReputation)),
+            BitConverter.ToUInt16(block, Rel(PL.CurrentReputation)),
+            BitConverter.ToUInt16(block, Rel(PL.WorldReputation)),
+            contract < 0x10000 ? 0 : Memory.Read<byte>(contract + (ulong)L.Contract.SquadStatus.Value),
+            club,
+            club < 0x10000 ? 0 : Memory.Read<ushort>(club + (ulong)L.Club.Reputation.Value));
     }
 
     public void Dispose() => Memory.Dispose();
 }
+
+
 
 
 

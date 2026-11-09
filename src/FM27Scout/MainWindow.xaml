@@ -11,6 +11,9 @@
                     <TextBlock Text="FM27 Scout" FontSize="18" FontWeight="Bold" Margin="0,0,14,0" VerticalAlignment="Center"/>
                     <Button x:Name="LoadButton" Content="Load from game" Style="{StaticResource AccentButton}" Click="Load_Click"
                             ToolTip="Read all players from the running FM27 (read-only). Press again to refresh."/>
+                    <TextBlock Text="My club" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                    <ComboBox x:Name="MyClubCombo" Width="190" SelectionChanged="MyClub_Changed" IsTextSearchEnabled="True"
+                              ToolTip="The club you manage (auto-detected from the game). Drives the Join estimate."/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                     <ComboBox x:Name="SavedCombo" Width="180" Margin="4,0" SelectionChanged="Saved_Selected" ToolTip="Saved searches"/>
@@ -98,6 +101,8 @@
                                             <Label Content="Max wage per week (e.g. 80k)"/><TextBox x:Name="FWageMax"/>
                                             <Label Content="Contract expires by (year)"/><TextBox x:Name="FContract"/>
                                             <CheckBox x:Name="FFree" Content="Free agents only" Margin="0,8,0,0"/>
+                                            <CheckBox x:Name="FGettable" Content="Gettable for us (Join ≥ 50)" Margin="0,4,0,0"
+                                                      ToolTip="Only players the Join estimate rates Possible or Likely for your club."/>
                                         </StackPanel>
                                     </Expander>
 
@@ -156,4 +161,5 @@
         </TabControl>
     </DockPanel>
 </Window>
+
 

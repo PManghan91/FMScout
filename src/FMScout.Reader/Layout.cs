@@ -12,6 +12,10 @@ public sealed class BuildLayout
     public PersonDbLayout PersonDb { get; set; } = new();
     public Hex GameDateRva { get; set; }
     public Hex PlayerVtableRva { get; set; }
+    /// <summary>Other player classes: same person layout, player block shifted by Shift bytes.</summary>
+    public PlayerClass[] ExtraPlayerClasses { get; set; } = [];
+    public Hex HumanManagerVtableRva { get; set; }
+    public Dictionary<string, string> SquadStatusNames { get; set; } = new();
     public PersonLayout Person { get; set; } = new();
     public NationLayout Nation { get; set; } = new();
     public ClubLayout Club { get; set; } = new();
@@ -22,6 +26,8 @@ public sealed class BuildLayout
     public string[] AttributeNames { get; set; } = [];
     public string[] PersonalityNames { get; set; } = [];
 }
+
+public sealed class PlayerClass { public Hex VtableRva { get; set; } public Hex Shift { get; set; } }
 
 public sealed class PersonDbLayout { public Hex RootRva { get; set; } public Hex VectorBegin { get; set; } public Hex VectorEnd { get; set; } }
 
@@ -41,11 +47,11 @@ public sealed class PersonLayout
     public int FemaleBit { get; set; }
 }
 
-public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } }
+public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } public Hex SquadStatus { get; set; } }
 public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } }
 
 public sealed class NationLayout { public Hex Name { get; set; } public Hex Code { get; set; } public Hex Nationality { get; set; } }
-public sealed class ClubLayout { public Hex Name { get; set; } public Hex ShortName { get; set; } }
+public sealed class ClubLayout { public Hex Name { get; set; } public Hex ShortName { get; set; } public Hex Reputation { get; set; } }
 
 /// <summary>Player-specific block. Offsets are relative to the person pointer and lie BEFORE it (negative).</summary>
 public sealed class PlayerLayout
@@ -58,6 +64,9 @@ public sealed class PlayerLayout
     public Hex PotentialAbility { get; set; }
     public Hex Value { get; set; }
     public Hex CommonName { get; set; }
+    public Hex HomeReputation { get; set; }
+    public Hex CurrentReputation { get; set; }
+    public Hex WorldReputation { get; set; }
 }
 
 [JsonConverter(typeof(HexConverter))]
@@ -96,6 +105,7 @@ public static class LayoutFile
         return JsonSerializer.Deserialize<Root>(json, opts)!.Builds;
     }
 }
+
 
 
 
