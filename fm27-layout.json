@@ -1,0 +1,63 @@
+{
+  // FM27 memory layout, keyed by the ProductVersion of game_plugin.dll (the native game engine).
+  // All "Rva" values are relative to the game_plugin.dll base address (ASLR-safe).
+  // Person offsets are relative to the person pointer (what the game's own lists point at = the object's vtable slot).
+  // Player offsets are NEGATIVE: the player-specific block (positions, attributes, CA/PA, height) sits just before the person pointer.
+  // Status of each field is documented in README.md ("confirmed" = checked on several known players).
+  "builds": {
+    "27.0.0+2493426": {
+      "module": "game_plugin.dll",
+      "steamBuildId": 26340721,
+
+      "personDb": {
+        "rootRva": "0x57056E0",   // static pointer -> database object
+        "vectorBegin": "0x138",   // std::vector<Person*> of ALL people (players, staff, retired...)
+        "vectorEnd": "0x140"
+      },
+      "gameDateRva": "0x5706018", // tentative: current in-game date (u16 day-of-year in low 9 bits, u16 year)
+      "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player
+
+      "person": {
+        "uid": "0xC",              // u32 FM unique ID (Haaland = 29179241)
+        "fullName": "0x40",        // FMString* (only set when full name differs, e.g. "Erling Braut Haaland")
+        "firstNameEntry": "0x50",  // -> name-table entry -> FMString*
+        "lastNameEntry": "0x58",
+        "nation": "0x68",          // Nation* (nation +0x18 = name)
+        "personality": "0x70",     // 8 bytes, 1-20 (hidden personality attributes; order unconfirmed)
+        "birthCity": "0x80",       // City* (city +0x18 = name)
+        "dateOfBirth": "0x88",     // u16 day-of-year (1-based), u16 year
+        "club": "0x108"            // Club* (null for free agents)
+      },
+      "nation": { "name": "0x18", "code": "0x28", "nationality": "0x30" },
+      "club": { "name": "0xC0", "shortName": "0xC8" },
+
+      "player": {
+        "blockStart": "-0x288",
+        "positions": "-0x138",       // 15 bytes, 1-20 position ratings
+        "attributes": "-0x129",      // 54 bytes, 1-100 scale (UI shows value/5)
+        "height": "-0x5A",           // u8 cm
+        "currentAbility": "-0x24",   // s16 1-200
+        "potentialAbility": "-0x22"  // s16 1-200 (negative = range, none seen in this save)
+      },
+
+      // Tentative order, inferred from known players (Verbruggen=GK, Haaland=ST, Yamal/Saka=AMR, Musiala/Wirtz=AMC).
+      "positionNames": [ "GK", "DL", "DC", "DR", "pos04?", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL?", "WBR?" ],
+
+      // 54 attributes. Names with '?' are statistical guesses; "aNN" are unidentified. See README.
+      "attributeNames": [
+        "a00 Crossing?", "a01 Dribbling?", "a02 Finishing?", "a03 Heading?", "a04 LongShots?", "a05 Marking?",
+        "a06 OffTheBall?", "a07 Passing?", "a08 Penalties?", "a09 Tackling?", "a10 Vision?",
+        "a11 GK", "a12 GK", "a13 GK", "a14 GK", "a15 GK", "a16 GK",
+        "a17 Decisions?", "a18 Bravery?", "a19 GK", "a20 Positioning?", "a21 GK",
+        "a22 Composure?", "a23 Technique?", "a24 LeftFoot", "a25 RightFoot",
+        "a26 Flair?", "a27 Corners?", "a28 a28", "a29 a29", "a30 LongThrows?",
+        "a31 GK(tendency)", "a32 GK(tendency)", "a33 GK(tendency)",
+        "a34 Acceleration?", "a35 FreeKicks?", "a36 Strength?", "a37 Stamina?", "a38 Pace?", "a39 JumpingReach?",
+        "a40 a40", "a41 Hidden", "a42 WorkRate?", "a43 Aggression?", "a44 a44(age-linked)", "a45 Hidden",
+        "a46 Agility?", "a47 Hidden?", "a48 Hidden", "a49 a49(age-linked)", "a50 a50", "a51 Hidden?",
+        "a52 Anticipation?", "a53 Concentration?"
+      ],
+      "personalityNames": [ "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7" ]
+    }
+  }
+}

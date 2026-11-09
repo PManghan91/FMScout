@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FMScout.Probe/FMScout.Probe.csproj" />
+    <Project Path="src/FMScout.Reader/FMScout.Reader.csproj" />
+  </Folder>
+</Solution>
