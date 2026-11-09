@@ -11,6 +11,11 @@ public sealed record Player(
     DateOnly? DateOfBirth,
     string? Nationality,
     string? Club,
+    string? Competition,
+    string? LinkedClub,
+    long WeeklyWage,
+    DateOnly? ContractExpiry,
+    long Value,
     int CurrentAbility,
     int PotentialAbility,
     int HeightCm,
@@ -107,7 +112,11 @@ public sealed class FmGame : IDisposable
         string name = $"{first} {last}".Trim();
 
         ulong nation = Memory.ReadPtr(v + (ulong)P.Nation.Value);
-        ulong club = Memory.ReadPtr(v + (ulong)P.Club.Value);
+        ulong linked = Memory.ReadPtr(v + (ulong)P.Club.Value);
+        ulong contract = Memory.ReadPtr(v + (ulong)P.Contract.Value);
+        ulong team = contract < 0x10000 ? 0 : Memory.ReadPtr(contract + (ulong)L.Contract.Team.Value);
+        ulong club = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Club.Value);
+        ulong comp = team < 0x10000 ? 0 : Memory.ReadPtr(team + (ulong)L.Team.Competition.Value);
 
         // One read for the whole player block that sits before the person pointer.
         ulong blockStart = v - (ulong)(-PL.BlockStart.Value);
@@ -122,6 +131,11 @@ public sealed class FmGame : IDisposable
             ReadDate(v + (ulong)P.DateOfBirth.Value),
             nation < 0x10000 ? null : FmString(Memory.ReadPtr(nation + (ulong)L.Nation.Name.Value)),
             club < 0x10000 ? null : FmString(Memory.ReadPtr(club + (ulong)L.Club.Name.Value)),
+            comp < 0x10000 ? null : FmString(Memory.ReadPtr(comp + (ulong)L.Team.CompetitionName.Value)),
+            linked < 0x10000 ? null : FmString(Memory.ReadPtr(linked + (ulong)L.Club.Name.Value)),
+            contract < 0x10000 ? 0 : Memory.Read<uint>(contract + (ulong)L.Contract.WeeklyWage.Value),
+            contract < 0x10000 ? null : ReadDate(contract + (ulong)L.Contract.ExpiryDate.Value),
+            BitConverter.ToUInt32(block, Rel(PL.Value)),
             BitConverter.ToInt16(block, Rel(PL.CurrentAbility)),
             BitConverter.ToInt16(block, Rel(PL.PotentialAbility)),
             block[Rel(PL.Height)],
@@ -132,4 +146,5 @@ public sealed class FmGame : IDisposable
 
     public void Dispose() => Memory.Dispose();
 }
+
 

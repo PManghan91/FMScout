@@ -47,7 +47,8 @@ A date is a `u16` day-of-year (1-based) followed by a `u16` year. Some dates use
 | personality, 8 × u8 1-20 | +0x70 | values look right, order unknown |
 | birth city `City*` | +0x80 | confirmed (Haaland → Leeds). City +0x18 = name |
 | date of birth | +0x88 | confirmed (Haaland 2000-07-21, Bellingham 2003-06-29, Saka 2001-09-05) |
-| club `Club*` | +0x108 | likely. Club +0xC0 = name, +0xC8 = short name. Haaland → Manchester City, but Yamal → "F.C. Barcelona Atlètic", which may mean this is the *team* rather than the parent club. Needs checking in the UI. |
+| contract `Contract*` | +0xA8 | confirmed. Contract +0x10 = Team\*, +0x20 = u32 weekly wage (GBP), +0x48 = expiry date. Team +0x30 = **current Club\*** (club +0xC0 = name, +0xC8 = short name), team +0x50 = competition (+0x48 = name) |
+| some other `Club*` | +0x108 | **not** the current club (Haaland → Man City, Yamal → Barcelona Atlètic, Verbruggen → Real Madrid). Meaning unknown. |
 
 ### Player block (sits BEFORE the person pointer)
 The player object's data starts at `p - 0x288`. The bytes after `p + 0x140` belong to the *next* player in the pool. I caught this using known goalkeepers: Verbruggen, Chevalier, Bazunu and Restes all have their GK ratings 0x138 bytes *before* their own pointer.
@@ -59,21 +60,29 @@ The player object's data starts at `p - 0x288`. The bytes after `p + 0x140` belo
 | height cm (u8) | −0x5A | confirmed (Haaland 195, Bellingham 186, Saka 178, Verbruggen 193). Range 151-210 |
 | **CA** (s16) | −0x24 | confirmed. 100% of players are 1-200, it has the highest correlation with attribute averages, and Yamal is 194 |
 | **PA** (s16) | −0x22 | confirmed. PA ≥ CA for 100% of 139,891 players. Haaland 195, Yamal 195 |
+| value (u32 GBP) | −0x54 | tentative. Yamal 221.9M (UI £202M-£222M), Verbruggen 25.2M (UI £19.5M-£25M), Haaland exactly 300M (shown as Not for Sale) |
 | weight | – | **not found** in the object. It is probably in a referenced sub-object |
 
-### What I know about the 54 attributes (statistics over all 139,891 players)
-* **GK-only** (low for about 90% of players, r ≈ 0.9 with GK rating): indices 11-16, 19, 21. Indices 31-33 are always multiples of 5, which suggests GK *tendencies*.
-* **Left foot = 24, right foot = 25** (confirmed: Haaland, Saka and Yamal are left-footed, the rest right-footed).
-* Strong guesses:
-  * 2 = Finishing (correlates with ST rating)
-  * 5 and 9 = Marking and Tackling (r = 0.84 with each other, high for DCs)
-  * 39 = Jumping Reach (r = 0.87 with height)
-  * 27 and 35 = Corners and Free Kicks (a pair, both rare)
-  * 30 = Long Throws
-* **Hidden** (always multiples of 5, no correlation with CA): 41, 45, 48. Probably also 47 and 51.
-* Age-linked: 44 and 49.
-* By count, the 54 bytes are: 14 technical + 14 mental + 8 physical + 11 GK + 5 hidden + 2 feet.
+### Attribute order: solved against in-game screenshots
+Every displayed value equals `round(raw/5)` for Haaland, Yamal and Verbruggen. See [docs/ground-truth-brr.md](docs/ground-truth-brr.md). The order is FM's classic internal one:
 
+```
+ 0 Crossing      1 Dribbling     2 Finishing     3 Heading       4 LongShots     5 Marking
+ 6 OffTheBall    7 Passing       8 Penalties     9 Tackling     10 Vision       11 Handling
+12 AerialReach* 13 CommandOfArea 14 Communication* 15 Kicking*  16 Throwing*    17 Anticipation
+18 Decisions    19 OneOnOnes    20 Positioning  21 Reflexes*    22 FirstTouch   23 Technique
+24 LeftFoot     25 RightFoot    26 Flair        27 Corners      28 Teamwork     29 WorkRate
+30 LongThrows   31 Eccentricity 32 RushingOut   33 Punching     34 Acceleration 35 FreeKicks
+36 Strength     37 Stamina      38 Pace         39 JumpingReach 40 Leadership   41 Dirtiness†
+42 Balance      43 Bravery      44 Consistency† 45 Aggression   46 Agility      47 ImportantMatches†
+48 InjuryProneness† 49 Versatility† 50 NaturalFitness 51 Determination 52 Composure 53 Concentration
+```
+
+\* These are GK ties that I broke using the known order; a second GK screenshot would confirm them. † Hidden attributes, named from the order.
+
+The feet use the same 1-100 scale: 100 = Very Strong, 60 = Fairly Strong, 55 = Reasonable.
+
+The in-game date is confirmed at `game_plugin.dll+0x5706018`. It reads 4/2/2037, matching the UI.
 ## Sample output (`FMScout.Probe report`)
 
 ```
@@ -96,17 +105,17 @@ Sanity: 100.0% have CA in 1-200; PA>=CA for 100.0%; heights 151-210 cm
 Run it yourself to see the full attribute dump.
 
 ## Still unknown or to verify
-1. The **name of each attribute index** and the exact **position order**. The quickest fix: open one or two players in the game UI (one outfielder, one GK) and compare against `report` output. That would pin every index in a few minutes.
-2. **Weight**.
-3. Whether +0x108 is the parent club or the playing team. Check Yamal in the UI.
-4. The **game date** RVA (0x5706018) is tentative.
-5. The personality block order (Adaptability, Ambition, Loyalty, Pressure, Professionalism, Sportsmanship, Temperament, Controversy).
-6. Common or known-as names (e.g. "Lamine Yamal" rather than "Lamine Yamal Nasraoui"), and contract, wage, value and reputation (the Player +0xA8 sub-object looks like a contract and has a back-pointer to the person).
+1. Position-rating order for the fullback and wing-back slots (GK, DM, ML, MC, MR, AML, AMC, AMR and ST are solid).
+2. Personality block order (8 bytes at +0x70).
+3. Weight.
+4. Value: the field is tentative.
+5. Meaning of the +0x108 club pointer.
+6. Not decoded yet: known-as names, traits, reputation, playing-time status, and caps/goals.
 7. The layout is per build. A game patch will very likely move the RVAs. The exploration commands make re-deriving them quick: `who <surname>`, then `arrays`, then `refsany`.
-
 ## Build and run
 ```
 dotnet build -c Release
 src\FMScout.Probe\bin\Release\net10.0\FMScout.Probe.exe report Haaland Saka
 ```
 This needs FM27 running with a save loaded. It targets .NET 10 (the SDK installed here) on x64.
+

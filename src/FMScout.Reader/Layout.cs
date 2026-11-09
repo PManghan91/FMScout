@@ -15,6 +15,8 @@ public sealed class BuildLayout
     public PersonLayout Person { get; set; } = new();
     public NationLayout Nation { get; set; } = new();
     public ClubLayout Club { get; set; } = new();
+    public ContractLayout Contract { get; set; } = new();
+    public TeamLayout Team { get; set; } = new();
     public PlayerLayout Player { get; set; } = new();
     public string[] PositionNames { get; set; } = [];
     public string[] AttributeNames { get; set; } = [];
@@ -34,7 +36,11 @@ public sealed class PersonLayout
     public Hex BirthCity { get; set; }
     public Hex DateOfBirth { get; set; }
     public Hex Club { get; set; }
+    public Hex Contract { get; set; }
 }
+
+public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } }
+public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } }
 
 public sealed class NationLayout { public Hex Name { get; set; } public Hex Code { get; set; } public Hex Nationality { get; set; } }
 public sealed class ClubLayout { public Hex Name { get; set; } public Hex ShortName { get; set; } }
@@ -48,6 +54,7 @@ public sealed class PlayerLayout
     public Hex Height { get; set; }
     public Hex CurrentAbility { get; set; }
     public Hex PotentialAbility { get; set; }
+    public Hex Value { get; set; }
 }
 
 [JsonConverter(typeof(HexConverter))]
@@ -84,4 +91,5 @@ public static class LayoutFile
         return JsonSerializer.Deserialize<Root>(File.ReadAllText(path), opts)!.Builds;
     }
 }
+
 

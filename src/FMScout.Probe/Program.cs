@@ -112,6 +112,15 @@ switch (cmd)
             }
             break;
         }
+    case "ptr": Console.WriteLine($"{m.ReadPtr(Explore.Hex(args[1]) + Explore.Hex(args[2])):X}"); break;
+    case "range":
+        {
+            ulong a = Explore.Hex(args[1]); int len = Convert.ToInt32(args[2], 16); long lo = long.Parse(args[3]), hi = long.Parse(args[4]);
+            var b = m.ReadBytes(a, len)!;
+            for (int i = 0; i + 4 <= len; i++) { uint v = BitConverter.ToUInt32(b, i); if (v >= lo && v <= hi) Console.WriteLine($"u32 @+0x{i:X} = {v}"); }
+            for (int i = 0; i + 8 <= len; i += 4) { long v = BitConverter.ToInt64(b, i); if (v >= lo && v <= hi) Console.WriteLine($"i64 @+0x{i:X} = {v}"); }
+            break;
+        }
     case "dump": Explore.Dump(m, Explore.Hex(args[1]), args.Length > 2 ? Convert.ToInt32(args[2], args[2].StartsWith("0x") ? 16 : 10) : 256); break;
     case "modules":
         foreach (System.Diagnostics.ProcessModule mod in m.Process.Modules)
@@ -121,6 +130,8 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
 
 
 
