@@ -690,6 +690,24 @@ public partial class MainWindow : Window
 
     internal void SelectTab(int i) => Tabs.SelectedIndex = i;
 
+    internal string SelfTestUpgradeMenu(string name)
+    {
+        var p = _all.FirstOrDefault(x => x.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        if (p == null) return name + ": not found";
+        var sb = new System.Text.StringBuilder($"{p.Name} ({p.Club}) {p.PositionsText}; Find upgrade menu:\n");
+        void Dump(IEnumerable<object> items, string ind)
+        {
+            foreach (var o in items)
+                if (o is MenuItem mi) { sb.AppendLine(ind + mi.Header); Dump(mi.Items.Cast<object>(), ind + "    "); }
+        }
+        Dump(UpgradeMenuItems(p, () => { }), "  ");
+        int amc = Model.Positions.Index("AMC");
+        var best = Enumerable.Range(0, _roles.Roles.Length).Where(i => _roles.Roles[i].Positions.Contains("AMC")).OrderByDescending(i => p.RoleScores[i]).First();
+        FindUpgrade(p, best, askSettings: false);
+        sb.AppendLine($"upgrade as {_roles.Roles[best].Name} ({p.RoleScores[best]:F0}): {_view.Count} found; top: " + string.Join(", ", _view.Take(5).Select(x => $"{x.Name} ({x.Club}, {x.SelectedRoleScore:F0}, join {x.Join:F0})")));
+        return sb.ToString();
+    }
+
     internal string SelfTestQa()
     {
         var sb = new System.Text.StringBuilder();
@@ -925,15 +943,61 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
 
         var up = new MenuItem { Header = "Find upgrade" };
-        foreach (var (r, i) in _roles.Roles.Select((r, i) => (r, i)).OrderByDescending(t => p.RoleScores[t.i]).Take(5))
-        {
-            int ri = i;
-            var mi = new MenuItem { Header = $"as {r.Name}  (his score {p.RoleScores[i]:F0})" };
-            mi.Click += (_, _) => FindUpgrade(p, ri);
-            up.Items.Add(mi);
-        }
+        foreach (var item in UpgradeMenuItems(p, () => { })) up.Items.Add(item);
         menu.Items.Add(up);
         return menu;
+    }
+
+    /// <summary>
+    /// Find-upgrade choices: his 5 best roles, then every position he can play (Competent 10+, best first) with all of
+    /// that position's roles, then the remaining positions under "Other positions".
+    /// </summary>
+    List<object> UpgradeMenuItems(PlayerRow p, Action after)
+    {
+        var items = new List<object>();
+        MenuItem RoleItem(int i)
+        {
+            var mi = new MenuItem { Header = $"{_roles.Roles[i].Name} ({_roles.Roles[i].Code})  —  his score {p.RoleScores[i]:F0} · pot {p.PotentialRoleScores[i]:F0}" };
+            mi.Click += (_, _) => { FindUpgrade(p, i); after(); };
+            return mi;
+        }
+        items.Add(new MenuItem { Header = "Best roles", IsEnabled = false, FontWeight = FontWeights.SemiBold });
+        foreach (var i in Enumerable.Range(0, _roles.Roles.Length).OrderByDescending(i => p.RoleScores[i]).Take(5)) items.Add(RoleItem(i));
+        items.Add(new Separator());
+        var names = Model.Positions.Names;
+        var byPos = Enumerable.Range(0, Math.Min(names.Length, p.Positions.Length))
+            .Where(pi => names[pi] != "SW")
+            .Select(pi => (pi, name: names[pi], rating: (int)p.Positions[pi],
+                roles: Enumerable.Range(0, _roles.Roles.Length).Where(ri => _roles.Roles[ri].Positions.Contains(names[pi], StringComparer.OrdinalIgnoreCase)).OrderByDescending(ri => p.RoleScores[ri]).ToList()))
+            .Where(t => t.roles.Count > 0).OrderByDescending(t => t.rating).ToList();
+        string Fam(int v) => v >= 18 ? "Natural" : v >= 15 ? "Accomplished" : v >= 10 ? "Competent" : v >= 5 ? "Unconvincing" : "Awkward";
+        MenuItem PosItem((int pi, string name, int rating, List<int> roles) t)
+        {
+            var mi = new MenuItem { Header = $"{t.name}  ({Fam(t.rating)} {t.rating})" };
+            foreach (var ri in t.roles) mi.Items.Add(RoleItem(ri));
+            return mi;
+        }
+        var bp = new MenuItem { Header = "By position" };
+        foreach (var t in byPos.Where(t => t.rating >= 10)) bp.Items.Add(PosItem(t));
+        var rest = byPos.Where(t => t.rating < 10).ToList();
+        if (rest.Count > 0)
+        {
+            if (bp.Items.Count > 0) bp.Items.Add(new Separator());
+            var other = new MenuItem { Header = "Other positions (below Competent)" };
+            foreach (var t in rest) other.Items.Add(PosItem(t));
+            bp.Items.Add(other);
+        }
+        items.Add(bp);
+        var any = new MenuItem { Header = "Choose any role…" };
+        any.Click += (_, _) =>
+        {
+            var list = Enumerable.Range(0, _roles.Roles.Length)
+                .Select(i => (i, $"{_roles.Roles[i].Display}   —   his score {p.RoleScores[i]:F0} · pot {p.PotentialRoleScores[i]:F0}")).ToList();
+            int pick = RolePicker.Ask(this, $"Find upgrade for {p.Name}: choose a role", list);
+            if (pick >= 0) { FindUpgrade(p, pick); after(); }
+        };
+        items.Add(any);
+        return items;
     }
 
     FilterState _upgradeSettings = new();

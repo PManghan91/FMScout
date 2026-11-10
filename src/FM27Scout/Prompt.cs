@@ -113,3 +113,45 @@ public static class Prompt
 }
 
 
+
+
+/// <summary>Searchable list of all roles (already grouped by position) for Find upgrade › Choose any role.</summary>
+public static class RolePicker
+{
+    public static int Ask(Window owner, string title, IReadOnlyList<(int Index, string Label)> roles)
+    {
+        var w = new Window { Title = title, Owner = owner, Width = 520, Height = 640, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = (System.Windows.Media.Brush)Application.Current.FindResource("Bg"), ResizeMode = ResizeMode.CanResizeWithGrip };
+        var dock = new DockPanel { Margin = new Thickness(12) };
+        var search = new TextBox { Margin = new Thickness(0, 0, 0, 8), ToolTip = "Type to filter (name, code or position)" };
+        DockPanel.SetDock(search, Dock.Top);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
+        var ok = new Button { Content = "Find upgrades", IsDefault = true, Padding = new Thickness(14, 4, 14, 4), Style = (Style)Application.Current.FindResource("AccentButton") };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(14, 4, 14, 4), Margin = new Thickness(8, 0, 0, 0) };
+        buttons.Children.Add(ok); buttons.Children.Add(cancel);
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        var list = new ListBox { DisplayMemberPath = "Label", FontSize = 13 };
+        dock.Children.Add(search); dock.Children.Add(buttons); dock.Children.Add(list);
+        w.Content = dock;
+        void Refresh()
+        {
+            var q = search.Text.Trim();
+            list.ItemsSource = roles.Where(r => q.Length == 0 || r.Label.Contains(q, StringComparison.OrdinalIgnoreCase)).Select(r => new RoleItem(r.Index, r.Label)).ToList();
+            if (list.Items.Count > 0) list.SelectedIndex = 0;
+        }
+        search.TextChanged += (_, _) => Refresh();
+        search.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Down && list.Items.Count > 0) { list.SelectedIndex = Math.Min(list.Items.Count - 1, list.SelectedIndex + 1); list.ScrollIntoView(list.SelectedItem); e.Handled = true; }
+            if (e.Key == System.Windows.Input.Key.Up && list.Items.Count > 0) { list.SelectedIndex = Math.Max(0, list.SelectedIndex - 1); list.ScrollIntoView(list.SelectedItem); e.Handled = true; }
+        };
+        int result = -1;
+        ok.Click += (_, _) => { if (list.SelectedItem is RoleItem r) { result = r.Index; w.DialogResult = true; } };
+        list.MouseDoubleClick += (_, _) => { if (list.SelectedItem is RoleItem r) { result = r.Index; w.DialogResult = true; } };
+        Refresh();
+        w.Loaded += (_, _) => search.Focus();
+        return w.ShowDialog() == true ? result : -1;
+    }
+
+    sealed record RoleItem(int Index, string Label);
+}

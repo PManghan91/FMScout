@@ -80,13 +80,7 @@ public partial class MainWindow
         });
         var upBtn = Btn("Find upgrade ▾", "Find better players for this role who would join you", () => { });
         var upMenu = new ContextMenu();
-        foreach (var (r, i) in _roles.Roles.Select((r, i) => (r, i)).OrderByDescending(t => p.RoleScores[t.i]).Take(5))
-        {
-            int ri = i;
-            var mi = new MenuItem { Header = $"as {r.Name}  (his score {p.RoleScores[i]:F0})" };
-            mi.Click += (_, _) => { FindUpgrade(p, ri); Activate(); };
-            upMenu.Items.Add(mi);
-        }
+        foreach (var item in UpgradeMenuItems(p, () => Activate())) upMenu.Items.Add(item);
         upBtn.ContextMenu = upMenu;
         upBtn.Click += (_, _) => { upMenu.PlacementTarget = upBtn; upMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom; upMenu.IsOpen = true; };
         Btn("Find similar", "Players with the same best role, a similar score and age (transfer-arranged excluded)", () => { FindSimilar(p); Activate(); });

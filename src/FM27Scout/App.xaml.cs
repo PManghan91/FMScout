@@ -56,6 +56,7 @@ public partial class App : Application
         log.WriteLine(w.SelfTestWp());
         log.WriteLine(w.SelfTestUpgrade());
         log.WriteLine(w.SelfTestQa());
+        log.WriteLine(w.SelfTestUpgradeMenu("Dom Edelson"));
         { var rs = RoleSet.LoadUserOrDefault(); log.WriteLine($"roles: {rs.Roles.Length} (merged built-ins {rs.MergedBuiltIns}); OCB {(rs.IndexOf("OCB") >= 0 ? "present" : "MISSING")}; first: {string.Join(", ", rs.Roles.Take(6).Select(r => r.Code))}"); }
         log.WriteLine($"arranged transfers: {w.SelfTestArranged()}");
         log.WriteLine("FM shortlists: " + string.Join("; ", GameLoader.ReadFmShortlists().Select(kv => $"{kv.Key}: {kv.Value.Count}")));
