@@ -132,6 +132,7 @@
                         <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="14,8,8,0">
                             <Button DockPanel.Dock="Right" Content="✕" Padding="8,2" Click="CloseProfile_Click" ToolTip="Close (Esc)"/>
+                            <Button DockPanel.Dock="Right" Content="Full profile ↗" Padding="8,2" Margin="0,0,6,0" Click="FullProfile_Click" ToolTip="Open the wide FM-style profile card"/>
                             <TextBlock Text="Player profile" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
                         </DockPanel>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">

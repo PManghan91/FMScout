@@ -726,9 +726,7 @@ public partial class MainWindow : Window
     {
         var p = _all.Where(x => x.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).OrderByDescending(x => x.CA).FirstOrDefault();
         if (p == null) return null;
-        var sp = new StackPanel { Margin = new Thickness(18, 14, 18, 18) };
-        ShowProfile(p, sp);
-        return new Border { Background = (Brush)FindResource("Panel"), Width = 560, Child = sp };
+        return new Border { Background = (Brush)FindResource("Bg"), Width = 1400, Child = BuildProfileCard(p) };
     }
 
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; OpenProfile(_view[i]); } }
@@ -809,27 +807,7 @@ public partial class MainWindow : Window
     void SquadGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (!IsHeader(e) && SquadGrid.SelectedItem is PlayerRow p) OpenProfileWindow(p); }
     static bool IsHeader(MouseButtonEventArgs e) => e.OriginalSource is DependencyObject d && FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) != null;
 
-    Window? _profileWindow; StackPanel? _profileWindowPanel;
-    void OpenProfileWindow(PlayerRow p)
-    {
-        if (_profileWindow == null)
-        {
-            _profileWindowPanel = new StackPanel { Margin = new Thickness(18, 14, 18, 18) };
-            _profileWindow = new Window
-            {
-                Owner = this, Width = 560, Height = Math.Min(980, SystemParameters.WorkArea.Height - 40),
-                WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = (Brush)FindResource("Panel"),
-                Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _profileWindowPanel },
-            };
-            _profileWindow.KeyDown += (_, k) => { if (k.Key == Key.Escape) _profileWindow?.Close(); };
-            _profileWindow.Closed += (_, _) => { _profileWindow = null; _profileWindowPanel = null; };
-            _profileWindow.Show();
-        }
-        _profileWindow.Title = $"{p.Name} - profile";
-        ShowProfile(p, _profileWindowPanel);
-        _profileWindow.Activate();
-    }
-    void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e)
+   void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject d && FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) != null) return; // header double-click
         if (PlayerGrid.SelectedItem is PlayerRow p) OpenProfile(p);
@@ -1192,6 +1170,7 @@ public partial class MainWindow : Window
     }
 
     void CloseProfile_Click(object sender, RoutedEventArgs e) => CloseProfile();
+    void FullProfile_Click(object sender, RoutedEventArgs e) { if (PlayerGrid.SelectedItem is PlayerRow p) OpenProfileWindow(p); }
 
     void ShowProfile(PlayerRow p, StackPanel? target = null)
     {

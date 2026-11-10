@@ -233,3 +233,10 @@ publish\FM27Scout.exe --selftest <dir>                  # headless check: loads,
 
 
 
+
+
+## Player profile card and Transfer arranged
+
+- Double-click a player on **Shortlist** or **Squad**, or use right-click › Open profile, to open the wide profile card in its own window. On Players, double-click opens the side panel, and **Full profile ↗** opens the card. Esc closes it.
+- The card shows a header with badges, key facts, FM-style 1-20 attributes including hidden ones, a positions pitch, the top 8 roles with now/potential bars, Would he join, and buttons for Shortlist, Compare, Find upgrade, Find similar and Copy name.
+- **Transfer arranged** shows agreed moves read from FM's own offers: destination, date, and whether it's free. These are read about 25 s after Load, in the background. It's available as a column and as query terms `trn` / `-trn`. **Exclude transfer arranged** is in Quick filters and on the Shortlist bar, where it's on by default. Find upgrade and all ★ presets exclude these players automatically.
