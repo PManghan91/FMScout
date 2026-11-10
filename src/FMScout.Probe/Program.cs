@@ -90,6 +90,67 @@ if (args.Length > 0 && args[0] == "statsfind")
     }
     return;
 }
+if (args.Length > 0 && args[0] == "xidump")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var players = g.PlayerPointers().ToHashSet();
+    ulong hvt = g.ModuleBase + (ulong)g.Layout.HumanManagerVtableRva.Value;
+    var paul = g.PersonPointers().First(p2 => m2.ReadPtr(p2) == hvt && (g.FmString(m2.ReadPtr(p2 + 0x40)) ?? "").Contains("Manghan"));
+    ulong club = m2.ReadPtr(m2.ReadPtr(m2.ReadPtr(paul + 0xA8) + 0x10) + 0x30);
+    ulong x = m2.ReadPtr(club + 0x3E8);
+    Console.WriteLine($"club+3E8 = {x:X} vt {(g.InModule(m2.ReadPtr(x)) ? (m2.ReadPtr(x) - g.ModuleBase).ToString("X") : "-")}");
+    foreach (int yo in new[] { 0xD0, 0xD8 })
+    {
+        ulong y = m2.ReadPtr(x + (ulong)yo);
+        Console.WriteLine($"--- x+{yo:X} = {y:X} vt {(g.InModule(m2.ReadPtr(y)) ? (m2.ReadPtr(y) - g.ModuleBase).ToString("X") : "-")}");
+        var buf = m2.ReadBytes(y, 0x900)!;
+        for (int o = 0; o < buf.Length; o += 8)
+        {
+            ulong q = BitConverter.ToUInt64(buf, o);
+            string d = players.Contains(q) ? $"PLAYER {g.ReadPlayer(q).Name} [{g.ReadPlayer(q).Positions.Length}]" : g.InModule(q) ? $"vt/static {q - g.ModuleBase:X}" : ProcessMemory.IsObjPtr(q) && g.InModule(m2.ReadPtr(q)) ? $"obj vt {m2.ReadPtr(q) - g.ModuleBase:X}" : "";
+            if (o >= 0x5A0 || o < 0x100) Console.WriteLine($"  +{o:X3}: {q:X16} {Convert.ToHexString(buf, o, 8)} {d}");
+        }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "findxi")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var players = g.PlayerPointers().ToHashSet();
+    ulong hvt = g.ModuleBase + (ulong)g.Layout.HumanManagerVtableRva.Value;
+    var paul = g.PersonPointers().First(p2 => m2.ReadPtr(p2) == hvt && (g.FmString(m2.ReadPtr(p2 + 0x40)) ?? "").Contains("Manghan"));
+    ulong con = m2.ReadPtr(paul + 0xA8), team = m2.ReadPtr(con + 0x10), club = m2.ReadPtr(team + 0x30);
+    // squad = players whose contract team club == our club
+    var squad = new HashSet<ulong>();
+    foreach (var pp in players) { ulong pc = m2.ReadPtr(pp + 0xA8); if (ProcessMemory.IsObjPtr(pc)) { ulong t = m2.ReadPtr(pc + 0x10); if (ProcessMemory.IsObjPtr(t) && m2.ReadPtr(t + 0x30) == club) squad.Add(pp); } }
+    Console.WriteLine($"squad {squad.Count}; team {team:X} club {club:X}");
+    var seen = new HashSet<ulong>(); var q = new Queue<(ulong a, string path, int d)>();
+    foreach (var (a, n) in new[] { (paul, "MGR"), (team, "TEAM"), (club, "CLUB"), (m2.ReadPtr(team + 0x80), "TDATA") }) q.Enqueue((a, n, 0));
+    while (q.Count > 0)
+    {
+        var (a, path, d) = q.Dequeue();
+        if (!seen.Add(a) || seen.Count > 200000) continue;
+        var buf = m2.ReadBytes(a, 0x800); if (buf == null) continue;
+        // inline arrays of player pointers at any stride
+        foreach (int stride in new[] { 8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x60 })
+            for (int o = 0; o + stride * 11 <= buf.Length; o += 8)
+            {
+                int n = 0; while (o + n * stride + 8 <= buf.Length && squad.Contains(BitConverter.ToUInt64(buf, o + n * stride))) n++;
+                if (n >= 9) { Console.WriteLine($"  {path}+{o:X} stride {stride:X}: {n} squad players: {string.Join(", ", Enumerable.Range(0, n).Select(i => g.ReadPlayer(BitConverter.ToUInt64(buf, o + i * stride)).Name))}"); o += n * stride; }
+            }
+        if (d >= 3) continue;
+        for (int o = 0; o + 8 <= buf.Length; o += 8)
+        {
+            ulong v = BitConverter.ToUInt64(buf, o);
+            if (!ProcessMemory.IsObjPtr(v) || players.Contains(v)) continue;
+            // vectors: follow begin pointer too
+            q.Enqueue((v, $"{path}+{o:X}>", d + 1));
+        }
+    }
+    Console.WriteLine($"visited {seen.Count}");
+    return;
+}
 if (args.Length > 0 && args[0] == "readrva")
 {
     using var m5 = ProcessMemory.Attach("fm");
@@ -1062,6 +1123,8 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
 
 
 

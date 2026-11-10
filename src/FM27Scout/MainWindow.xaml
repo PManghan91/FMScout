@@ -151,11 +151,14 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Club" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
                             <ComboBox x:Name="SquadClubCombo" Width="220" SelectionChanged="SquadClub_Changed" IsTextSearchEnabled="True"/>
+                            <RadioButton x:Name="SquadModeList" Content="List" IsChecked="True" GroupName="SquadMode" Margin="14,0,0,0" VerticalAlignment="Center" Click="SquadMode_Click"/>
+                            <RadioButton x:Name="SquadModeTactic" Content="Tactic view" GroupName="SquadMode" Margin="10,0,0,0" VerticalAlignment="Center" Click="SquadMode_Click" FontWeight="SemiBold"/>
                             <CheckBox x:Name="SquadAllTeams" Content="Include reserves &amp; youth" Margin="14,0,0,0" VerticalAlignment="Center" Click="SquadAll_Click"/>
                             <TextBlock x:Name="SquadTitle" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
                             <TextBlock Text="   ·   right-click: compare / find upgrade / shortlist · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
                         </StackPanel>
                     </Border>
+                    <Border x:Name="TacticHost" DockPanel.Dock="Bottom" Visibility="Collapsed"/>
                     <DataGrid x:Name="SquadGrid" SelectionChanged="SquadGrid_SelectionChanged" MouseDoubleClick="SquadGrid_DoubleClick">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>

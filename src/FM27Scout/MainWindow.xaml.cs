@@ -797,6 +797,7 @@ public partial class MainWindow : Window
 
     void SquadClub_Changed(object sender, SelectionChangedEventArgs e) { if (!_suppressSquad) ShowSquad(); }
     void SquadAll_Click(object sender, RoutedEventArgs e) => ShowSquad();
+    void SquadMode_Click(object sender, RoutedEventArgs e) => ShowTacticMode(SquadModeTactic.IsChecked == true);
 
     void ShowSquad()
     {
@@ -810,6 +811,7 @@ public partial class MainWindow : Window
             .OrderBy(p => p.Source.TeamAddress == first ? 0 : 1).ThenByDescending(p => p.BestRoleScore).ToList();
         SquadGrid.ItemsSource = list;
         SquadTitle.Text = $"{list.Count} players · reputation {club.Reputation:N0} · top wage {MoneyText.Format(club.TopWage)} p/w" + (club.Name == (MyClubCombo.SelectedItem as MyClub)?.Name ? " · your club" : "");
+        RefreshTactic(keepSlot: true);
     }
 
     void ShowInPlayers(PlayerRow p)

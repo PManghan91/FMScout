@@ -66,6 +66,7 @@ public partial class App : Application
         w.SelfTestSelect(0);
         Render(w, Path.Combine(outDir, "selftest-players.png"), 0);
         Render(w, Path.Combine(outDir, "selftest-squad.png"), 1);
+        w.SelfTestTactic(); Render(w, Path.Combine(outDir, "selftest-tactic.png"), 1);
         Render(w, Path.Combine(outDir, "selftest-compare.png"), 2);
         Render(w, Path.Combine(outDir, "selftest-clubs.png"), 3);
         Render(w, Path.Combine(outDir, "selftest-staff.png"), 4);
