@@ -1128,6 +1128,26 @@ public partial class MainWindow : Window
     void SlFilter_Changed(object sender, TextChangedEventArgs e) => UpdateShortlistTab();
     void SlFilter_Changed2(object sender, SelectionChangedEventArgs e) { if (SlPos.ItemsSource != null) UpdateShortlistTab(); }
     void SlFilter_Click(object sender, RoutedEventArgs e) => UpdateShortlistTab();
+    async void SlImportFm_Click(object sender, RoutedEventArgs e)
+    {
+        SlImportFm.IsEnabled = false;
+        try
+        {
+            var lists = await Task.Run(GameLoader.ReadFmShortlists);
+            var my = (MyClubCombo.SelectedItem as MyClub)?.Name;
+            var uids = my != null && lists.TryGetValue(my, out var mine) ? mine : lists.Values.SelectMany(x => x).Distinct().ToList();
+            int added = Shortlist.AddRange(uids);
+            UpdateShortlistTab();
+            var known = _all.Count == 0 ? uids.Count : uids.Count(u => _all.Any(p => p.Uid == u));
+            StatusText.Text = uids.Count == 0 ? "Your in-game shortlist is empty (or no save is loaded)."
+                : $"Imported your in-game shortlist{(my != null && lists.ContainsKey(my) ? $" ({my})" : "")}: {uids.Count} players, {added} new." +
+                  (known < uids.Count ? $" {uids.Count - known} aren't in the loaded data (press Load from game)." : "");
+            MessageBox.Show(this, StatusText.Text, "FM27 Scout");
+        }
+        catch (Exception ex) { ErrorDialog.Show(this, "FM27 Scout", "Couldn't read your in-game shortlist. Is FM27 running with your save loaded?\n\n" + ex.Message, ex.ToString()); }
+        finally { SlImportFm.IsEnabled = true; }
+    }
+
     void SlClear_Click(object sender, RoutedEventArgs e)
     {
         SlQuery.Text = SlAgeMin.Text = SlAgeMax.Text = SlCaMin.Text = SlPaMin.Text = "";

@@ -362,6 +362,13 @@ public static class Shortlist
     public static bool Contains(uint uid) => Ids.Contains(uid);
     public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
     public static int Count => Ids.Count;
+    /// <summary>Adds the given players; returns how many were new.</summary>
+    public static int AddRange(IEnumerable<uint> uids)
+    {
+        int n = 0; foreach (var u in uids) if (Ids.Add(u)) n++;
+        if (n > 0) FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(Ids));
+        return n;
+    }
 }
 
 

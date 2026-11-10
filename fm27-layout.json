@@ -73,6 +73,12 @@
       },
       "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48", "competitionNation": "0x60" },
 
+      // human manager's in-game shortlist: contract -> team -> +teamData -> +lists (vector of list objects) -> list +listPlayers (vector of entry*, entry +0 = player)
+      "shortlist": { "teamData": "0x80", "lists": "0x230", "listPlayers": "0x80", "entryPlayer": "0x0" },
+
+      // offers: proposed contracts are contract objects (+0x8 = player); the offer record pointing at one has status +0x2E (2 = agreed), +0x30 >= 1, kind +0x31 (8 = renewal, 6/7 = free)
+      "offers": { "contractPerson": "0x8", "status": "0x2E", "agreedStatus": 2, "agreed": "0x30", "kind": "0x31", "renewalKinds": [8], "freeKinds": [6, 7] },
+
       "player": {
         "blockStart": "-0x288",
         "positions": "-0x138",       // 15 bytes, 1-20 position ratings

@@ -239,6 +239,44 @@ public sealed class FmGame : IDisposable
         return name == null ? null : new ClubInfo(club, name, Memory.Read<ushort>(club + (ulong)Layout.Club.Reputation.Value));
     }
 
+    /// <summary>
+    /// The in-game shortlist(s) of each human manager, keyed by the club he manages: player UIDs in FM's order.
+    /// The club data holds a few lists; the one(s) whose entries are all players are the shortlist.
+    /// </summary>
+    public Dictionary<string, List<uint>> HumanShortlists()
+    {
+        var vt = ModuleBase + (ulong)Layout.HumanManagerVtableRva.Value;
+        var S = Layout.Shortlist; var M = Memory;
+        var res = new Dictionary<string, List<uint>>();
+        foreach (var v in PersonPointers())
+        {
+            if (M.ReadPtr(v) != vt) continue;
+            ulong con = M.ReadPtr(v + (ulong)Layout.Person.Contract.Value); if (!ProcessMemory.IsObjPtr(con)) continue;
+            ulong team = M.ReadPtr(con + (ulong)Layout.Contract.Team.Value); if (!ProcessMemory.IsObjPtr(team)) continue;
+            var club = ReadClub(M.ReadPtr(team + (ulong)Layout.Team.Club.Value)); if (club == null) continue;
+            ulong data = M.ReadPtr(team + (ulong)S.TeamData.Value); if (!ProcessMemory.IsObjPtr(data)) continue;
+            ulong lb = M.ReadPtr(data + (ulong)S.Lists.Value), le = M.ReadPtr(data + (ulong)S.Lists.Value + 8);
+            if (!ProcessMemory.IsObjPtr(lb) || le < lb || le - lb > 8 * 64) continue;
+            var uids = res.TryGetValue(club.Name, out var have) ? have : res[club.Name] = new List<uint>();
+            for (ulong a = lb; a < le; a += 8)
+            {
+                ulong list = M.ReadPtr(a); if (!ProcessMemory.IsObjPtr(list)) continue;
+                ulong b = M.ReadPtr(list + (ulong)S.ListPlayers.Value), e = M.ReadPtr(list + (ulong)S.ListPlayers.Value + 8);
+                if (!ProcessMemory.IsObjPtr(b) || e <= b || e - b > 8 * 5000 || (e - b) % 8 != 0) continue;
+                var found = new List<uint>(); bool allPlayers = true;
+                for (ulong x = b; x < e; x += 8)
+                {
+                    ulong entry = M.ReadPtr(x);
+                    ulong person = ProcessMemory.IsObjPtr(entry) ? M.ReadPtr(entry + (ulong)S.EntryPlayer.Value) : 0;
+                    if (!ProcessMemory.IsObjPtr(person) || !IsPlayer(person)) { allPlayers = false; break; }
+                    found.Add(M.Read<uint>(person + (ulong)Layout.Person.Uid.Value));
+                }
+                if (allPlayers) foreach (var u in found) if (!uids.Contains(u)) uids.Add(u);
+            }
+        }
+        return res;
+    }
+
     /// <summary>Club(s) managed by human players (person class = human manager, via their contract).</summary>
     public List<ClubInfo> HumanClubs()
     {

@@ -136,6 +136,14 @@ public static class GameLoader
         return game.ArrangedTransfers(rows.Select(r => r.Source.Address).ToHashSet(), today, ct);
     }
 
+    /// <summary>Reads the human manager(s)' in-game shortlist(s): club name → player UIDs.</summary>
+    public static Dictionary<string, List<uint>> ReadFmShortlists()
+    {
+        var (layouts, _, _) = LoadLayouts();
+        using var game = FmGame.Attach(layouts);
+        return game.HumanShortlists();
+    }
+
     public static LoadResult Load(RoleSet roles, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         try { return LoadCore(roles, progress, ct); }

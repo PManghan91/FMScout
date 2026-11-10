@@ -31,6 +31,7 @@ public sealed class BuildLayout
     public ClubLayout Club { get; set; } = new();
     public ContractLayout Contract { get; set; } = new();
     public OfferLayout Offers { get; set; } = new();
+    public ShortlistLayout Shortlist { get; set; } = new();
     public TeamLayout Team { get; set; } = new();
     public PlayerLayout Player { get; set; } = new();
     public string[] PositionNames { get; set; } = [];
@@ -80,6 +81,15 @@ public sealed class ContractLayout { public Hex Team { get; set; } public Hex We
 /// Transfer/contract offers: each offer is a record holding a pointer to the proposed (future) contract, whose +0x8 is the player.
 /// Status 2 with "agreed" >= 1 means the deal is agreed (FM shows "Transfer arranged"); kind 8 is a renewal at the same club.
 /// </summary>
+/// <summary>Human manager's in-game shortlist: contract → team → +TeamData → +Lists (vector of list objects) → list +Players (vector of entries, entry +0 = player).</summary>
+public sealed class ShortlistLayout
+{
+    public Hex TeamData { get; set; } = new(0x80);
+    public Hex Lists { get; set; } = new(0x230);
+    public Hex ListPlayers { get; set; } = new(0x80);
+    public Hex EntryPlayer { get; set; } = new(0x0);
+}
+
 public sealed class OfferLayout
 {
     public Hex ContractPerson { get; set; } = new(0x8);

@@ -282,6 +282,7 @@
                                 <CheckBox x:Name="SlCanSign" Content="Hide can't sign" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
                                 <CheckBox x:Name="SlNoTrn" Content="Exclude transfer arranged" IsChecked="True" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click" ToolTip="Hide players who already have an agreed move elsewhere"/>
                                 <Button Content="Clear" Margin="10,0,0,0" Click="SlClear_Click"/>
+                                <Button x:Name="SlImportFm" Content="⇩ Import from FM shortlist" Margin="16,0,0,0" Click="SlImportFm_Click" ToolTip="Add the players on your in-game shortlist (read from the running game) to this shortlist. Nothing is removed."/>
                                 <TextBlock x:Name="SlError" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="IndianRed"/>
                             </WrapPanel>
                         </StackPanel>

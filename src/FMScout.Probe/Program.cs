@@ -88,6 +88,160 @@ if (args.Length > 0 && args[0] == "statsfind")
     }
     return;
 }
+if (args.Length > 0 && args[0] == "fmshortlist")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var byUid = g.PlayerPointers().Select(g.ReadPlayer).GroupBy(x => x.Uid).ToDictionary(x => x.Key, x => x.First());
+    foreach (var (club, uids) in g.HumanShortlists()) Console.WriteLine($"{club}: {uids.Count}: {string.Join(", ", uids.Select(u => byUid.TryGetValue(u, out var pl) ? pl.Name : u.ToString()))}");
+    return;
+}
+if (args.Length > 0 && args[0] == "clublists")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var players = g.PlayerPointers().ToHashSet();
+    ulong hvt = g.ModuleBase + (ulong)g.Layout.HumanManagerVtableRva.Value;
+    var paul = g.PersonPointers().First(p2 => m2.ReadPtr(p2) == hvt && (g.FmString(m2.ReadPtr(p2 + 0x40)) ?? "").Contains("Manghan"));
+    ulong team = m2.ReadPtr(m2.ReadPtr(paul + 0xA8) + 0x10);
+    ulong obj = m2.ReadPtr(team + 0x80);
+    Console.WriteLine($"team {team:X} team+0x30 {m2.ReadPtr(team + 0x30):X} obj {obj:X} vt {m2.ReadPtr(obj) - g.ModuleBase:X}");
+    for (int o = 0x210; o <= 0x250; o += 8) Console.WriteLine($"  obj+{o:X}: {m2.ReadPtr(obj + (ulong)o):X}");
+    ulong b = m2.ReadPtr(obj + 0x230), e = m2.ReadPtr(obj + 0x238);
+    Console.WriteLine($"lists vector {b:X}..{e:X} n={(e - b) / 8}");
+    for (ulong a = b; a < e && a < b + 8 * 40; a += 8)
+    {
+        ulong q = m2.ReadPtr(a);
+        ulong vb = m2.ReadPtr(q + 0x80), ve = m2.ReadPtr(q + 0x88);
+        int n = ve > vb && ve - vb < 8 * 10000 ? (int)((ve - vb) / 8) : -1;
+        var names = new List<string>();
+        for (int i = 0; i < Math.Min(n, 6); i++) { ulong r = m2.ReadPtr(vb + (ulong)i * 8); ulong pp = m2.ReadPtr(r); if (players.Contains(pp)) names.Add(g.ReadPlayer(pp).Name); }
+        string nm = "";
+        for (int o = 0; o < 0x80; o += 8) { var s2 = g.FmString(m2.ReadPtr(q + (ulong)o)); if (!string.IsNullOrWhiteSpace(s2) && s2.Length < 60) { nm += $" +{o:X}=\"{s2}\""; } }
+        Console.WriteLine($"  list {q:X} vt {(g.InModule(m2.ReadPtr(q)) ? (m2.ReadPtr(q) - g.ModuleBase).ToString("X") : "-")} n={n}{nm}: {string.Join(", ", names)}");
+        Console.WriteLine($"     head {Convert.ToHexString(m2.ReadBytes(q, 0x80) ?? [])}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "listnames")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var players = g.PlayerPointers().ToHashSet();
+    foreach (var s in args.Skip(1))
+    {
+        ulong v = ulong.Parse(s, System.Globalization.NumberStyles.HexNumber);
+        ulong b = m2.ReadPtr(v), e = m2.ReadPtr(v + 8);
+        Console.WriteLine($"--- vector at {v:X}: {(e - b) / 8} entries");
+        for (ulong a = b; a < e; a += 8)
+        {
+            ulong r = m2.ReadPtr(a); ulong pp = players.Contains(r) ? r : players.Contains(m2.ReadPtr(r)) ? m2.ReadPtr(r) : 0;
+            Console.WriteLine($"   {(pp != 0 ? g.ReadPlayer(pp).Name + " (" + g.ReadPlayer(pp).Club + ")" : "?")}  rec {Convert.ToHexString(m2.ReadBytes(r, 0x40) ?? [])}");
+        }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "dumpat")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var players = g.PlayerPointers().ToHashSet();
+    foreach (var s in args.Skip(1))
+    {
+        ulong a = ulong.Parse(s, System.Globalization.NumberStyles.HexNumber);
+        Console.WriteLine($"--- {a:X}");
+        for (long k = -0x60; k <= 0x60; k += 8)
+        {
+            ulong q = m2.ReadPtr((ulong)((long)a + k));
+            string d = players.Contains(q) ? " PLAYER " + g.ReadPlayer(q).Name : g.InModule(q) ? $" vt {q - g.ModuleBase:X}" : ProcessMemory.IsObjPtr(q) && g.InModule(m2.ReadPtr(q)) ? $" ->obj vt {m2.ReadPtr(q) - g.ModuleBase:X}" : "";
+            Console.WriteLine($"  {k,4:X}: {q:X16}{d}");
+        }
+    }
+    foreach (var pp in players) { var n = g.ReadPlayer(pp).Name; if (n.Contains("Sinul") || n.EndsWith(" Rao")) Console.WriteLine($"name match: {n} {pp:X}"); }
+    return;
+}
+if (args.Length > 0 && args[0] == "findlist")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var names = args.Skip(1).ToArray();
+    var players = g.PlayerPointers().ToHashSet();
+    var t = players.Where(pp => names.Any(n => g.ReadPlayer(pp).Name.Contains(n))).ToDictionary(pp => pp, pp => g.ReadPlayer(pp).Name);
+    foreach (var (k, v) in t) Console.WriteLine($"{v} {k:X}");
+    // direct refs and refs to wrapper objects (entry -> person at +0..+0x20)
+    var refs = m2.ScanPointersToAny(t.Keys.ToHashSet(), privateOnly: true, max: 100000);
+    Console.WriteLine($"{refs.Count} direct refs");
+    var byRegion = refs.GroupBy(r => r.At >> 16).Where(gr => gr.Select(x => x.Value).Distinct().Count() >= 2).ToList();
+    foreach (var gr in byRegion) Console.WriteLine($"  region {gr.Key << 16:X}: {string.Join(", ", gr.Select(x => $"{x.At:X}={t[x.Value]}"))}");
+    // wrappers
+    var wrappers = new Dictionary<ulong, ulong>();
+    foreach (var (at, val) in refs) for (int k = 0; k <= 0x20; k += 8) wrappers.TryAdd(at - (ulong)k, val);
+    var wrefs = m2.ScanPointersToAny(wrappers.Keys.ToHashSet(), privateOnly: true, max: 200000);
+    var byRegion2 = wrefs.GroupBy(r => r.At >> 16).Where(gr => gr.Select(x => wrappers[x.Value]).Distinct().Count() >= 3).ToList();
+    foreach (var gr in byRegion2) Console.WriteLine($"  wrapper region {gr.Key << 16:X}: {string.Join(", ", gr.Select(x => $"{x.At:X}->{x.Value:X}(+{x.Value - 0:X})={t[wrappers[x.Value]]}"))}");
+    return;
+}
+if (args.Length > 0 && args[0] == "clubvecs")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var players = g.PlayerPointers().ToHashSet();
+    var sl = System.Text.Json.JsonSerializer.Deserialize<uint[]>(File.ReadAllText(Environment.ExpandEnvironmentVariables(@"%APPDATA%\FM27Scout\shortlist.json")))!.ToHashSet();
+    ulong hvt = g.ModuleBase + (ulong)g.Layout.HumanManagerVtableRva.Value;
+    var paul = g.PersonPointers().First(p2 => m2.ReadPtr(p2) == hvt && (g.FmString(m2.ReadPtr(p2 + 0x40)) ?? "").Contains("Manghan"));
+    ulong obj = m2.ReadPtr(m2.ReadPtr(m2.ReadPtr(paul + 0xA8) + 0x10) + 0x80);
+    Console.WriteLine($"obj {obj:X} vt {m2.ReadPtr(obj) - g.ModuleBase:X}; team+0x30 club? {m2.ReadPtr(m2.ReadPtr(paul + 0xA8) + 0x10) + 0x30:X}");
+    var buf = m2.ReadBytes(obj, 0x600)!;
+    for (int o = 0; o + 16 <= buf.Length; o += 8)
+    {
+        ulong b = BitConverter.ToUInt64(buf, o), e = BitConverter.ToUInt64(buf, o + 8);
+        if (!ProcessMemory.IsObjPtr(b) || e <= b || e - b > 8 * 20000 || (e - b) % 8 != 0) continue;
+        int n = (int)((e - b) / 8);
+        var names = new List<string>(); int inSl = 0, pl = 0; var fieldOff = -1;
+        for (int i = 0; i < n; i++)
+        {
+            ulong q = m2.ReadPtr(b + (ulong)i * 8); ulong pp = 0;
+            if (players.Contains(q)) pp = q;
+            else if (ProcessMemory.IsObjPtr(q)) for (int k = 0; k <= 0x20; k += 8) if (players.Contains(m2.ReadPtr(q + (ulong)k))) { pp = m2.ReadPtr(q + (ulong)k); fieldOff = k; break; }
+            if (pp == 0) continue;
+            pl++; var pr = g.ReadPlayer(pp); if (sl.Contains(pr.Uid)) inSl++; if (names.Count < 5) names.Add(pr.Name);
+        }
+        if (pl > 0) Console.WriteLine($"+{o:X}: n={n} players={pl} (entry field +{fieldOff:X}) in Scout shortlist {inSl}/{sl.Count}: {string.Join(", ", names)}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "humanvecs")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var players = g.PlayerPointers().ToHashSet();
+    ulong hvt = g.ModuleBase + (ulong)g.Layout.HumanManagerVtableRva.Value;
+    var humans = g.PersonPointers().Where(p2 => m2.ReadPtr(p2) == hvt).ToList();
+    Console.WriteLine($"{humans.Count} human managers");
+    var seen = new HashSet<ulong>();
+    void Walk(ulong obj, string path, int depth)
+    {
+        if (depth > 3 || !seen.Add(obj)) return;
+        var buf = m2.ReadBytes(obj, 0x400); if (buf == null) return;
+        for (int o = 0; o + 24 <= buf.Length; o += 8)
+        {
+            ulong b = BitConverter.ToUInt64(buf, o), e = BitConverter.ToUInt64(buf, o + 8);
+            if (ProcessMemory.IsObjPtr(b) && e > b && e - b <= 8 * 5000 && (e - b) % 8 == 0 && ProcessMemory.IsObjPtr(e))
+            {
+                int n = (int)((e - b) / 8), hits = 0, hitsInd = 0;
+                for (int i = 0; i < Math.Min(n, 50); i++) { ulong q = m2.ReadPtr(b + (ulong)i * 8); if (players.Contains(q)) hits++; else if (ProcessMemory.IsObjPtr(q) && (players.Contains(m2.ReadPtr(q)) || players.Contains(m2.ReadPtr(q + 8)) || players.Contains(m2.ReadPtr(q + 0x10)))) hitsInd++; }
+                if (hits + hitsInd > 0 && hits + hitsInd >= Math.Min(n, 50) / 2)
+                {
+                    Console.WriteLine($"  {path}+{o:X} vector n={n} direct={hits} indirect={hitsInd}");
+                    for (int i = 0; i < Math.Min(n, 6); i++) { ulong q = m2.ReadPtr(b + (ulong)i * 8); ulong pp = players.Contains(q) ? q : players.Contains(m2.ReadPtr(q)) ? m2.ReadPtr(q) : players.Contains(m2.ReadPtr(q + 8)) ? m2.ReadPtr(q + 8) : m2.ReadPtr(q + 0x10); if (players.Contains(pp)) Console.WriteLine($"      {g.ReadPlayer(pp).Name} ({g.ReadPlayer(pp).Club})"); }
+                }
+            }
+        }
+        for (int o = 0; o + 8 <= buf.Length; o += 8)
+        {
+            ulong q = BitConverter.ToUInt64(buf, o);
+            if (ProcessMemory.IsObjPtr(q) && !players.Contains(q) && g.InModule(m2.ReadPtr(q))) Walk(q, $"{path}+{o:X}>", depth + 1);
+        }
+    }
+    foreach (var h in humans) { Console.WriteLine($"human {g.FmString(m2.ReadPtr(h + 0x40))}"); Walk(h, "H", 0); }
+    return;
+}
 if (args.Length > 0 && args[0] == "arranged")
 {
     using var g = FmGame.Attach(Report.FindLayout());
@@ -845,6 +999,12 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
+
+
+
+
 
 
 
