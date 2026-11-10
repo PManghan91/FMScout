@@ -22,6 +22,8 @@ public static class WorkPermit
         { "Eredivisie", "Liga Portugal", "Jupiler Pro League", "Pro League", "EFL Championship", "Brasileirão", "Liga Profesional", "MLS", "Super Lig",
           "Trendyol Süper Lig", "Scottish Premiership", "cinch Premiership", "Super League", "Superliga", "Eliteserien", "Allsvenskan", "Liga MX", "LaLiga 2", "2. Bundesliga", "Serie B", "Ligue 2" };
 
+    public static bool IsEu(string? n) => n != null && Eu.Contains(n);
+
     public sealed record Result(string Text, string Detail, bool Needed);
 
     public static Result Check(PlayerRow p, string? clubNation, string myClub)
@@ -49,8 +51,8 @@ public static class WorkPermit
         pts += p.WorldRep / 250.0;                                    // international standing proxy (0-40)
         pts += TopLeagues.Contains(p.League) ? 25 : GoodLeagues.Contains(p.League) ? 12 : 0; // current league strength
         pts += Math.Max(0, (p.CA - 100) / 4.0);                        // ability
-        if (p.Age <= 21 && p.PA >= 150) pts += 8;                      // youth / high-potential concession
         string verdict = pts >= 45 ? "Needed – likely OK" : pts >= 32 ? "Needed – borderline" : "Needed – unlikely";
-        return new(verdict, $"No British/Irish passport ({list}). Estimated GBE points {pts:F0} (world rep {p.WorldRep:N0}, league {p.League}, CA {p.CA}). Estimate only.", true);
+        return new(verdict, $"No British/Irish passport ({list}). Estimated points {pts:F0} from world reputation {p.WorldRep:N0}, league {p.League}, CA {p.CA}. Estimate only: real GBE scoring also uses international caps and minutes, which aren't decoded yet.", true);
     }
 }
+

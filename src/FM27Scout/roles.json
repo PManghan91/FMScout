@@ -6,19 +6,19 @@
   //         then multiplied by the familiarity factor for the best of the role's positions.
   "tiers": { "key": 3, "important": 2, "useful": 1 },
 
-  // Position rating (1-20) -> multiplier. First rule whose "min" is <= rating wins.
+  // Position rating (1-20) -> multiplier, following FM's bands: 20 Natural, 15+ Accomplished, 10+ Competent,
+  // 5+ Unconvincing, below that Awkward. First rule whose "min" is <= rating wins.
   "familiarity": [
     { "min": 18, "factor": 1.00 },
     { "min": 15, "factor": 0.95 },
-    { "min": 12, "factor": 0.88 },
-    { "min": 9,  "factor": 0.78 },
+    { "min": 10, "factor": 0.85 },
     { "min": 5,  "factor": 0.65 },
     { "min": 1,  "factor": 0.50 }
   ],
 
-  // Potential role score: each attribute is assumed to grow towards 20 by
-  //   growth = (PA - CA) / (200 - CA) * ageFactor
-  // ageFactor comes from the first rule whose maxAge >= the player's age (players stop developing with age).
+  // Potential role score ("at PA"): the expected CA gain is (PA - CA) * ageFactor, adjusted by the player's development
+  // outlook (personality), then spread over the attributes that cost the most CA for his position group (fitted from your
+  // save at every load; physicals grow less after 23). ageFactor = first rule whose maxAge >= his age.
   "potentialAge": [
     { "maxAge": 20, "factor": 1.00 },
     { "maxAge": 23, "factor": 0.80 },
@@ -47,8 +47,20 @@
 
     { "code": "CB",   "name": "Centre-Back", "positions": ["DC"],
       "key": ["Marking", "Tackling", "Positioning", "Heading"],
-      "important": ["JumpingReach", "Strength", "Anticipation", "Concentration", "Bravery"],
-      "useful": ["Decisions", "Composure", "Pace", "Aggression"] },
+      "important": ["JumpingReach", "Strength", "Anticipation", "Concentration", "Bravery", "Pace"],
+      "useful": ["Decisions", "Composure", "Acceleration", "Aggression"] },
+    { "code": "SCB",  "name": "Stopping Centre-Back", "positions": ["DC"],
+      "key": ["Tackling", "Aggression", "Bravery", "Strength"],
+      "important": ["Marking", "Heading", "JumpingReach", "Anticipation", "Decisions"],
+      "useful": ["Positioning", "Pace", "Acceleration", "Concentration"] },
+    { "code": "CCB",  "name": "Covering Centre-Back", "positions": ["DC"],
+      "key": ["Positioning", "Anticipation", "Pace", "Concentration"],
+      "important": ["Marking", "Tackling", "Acceleration", "Decisions", "Composure"],
+      "useful": ["Heading", "JumpingReach", "Strength"] },
+    { "code": "LIB",  "name": "Libero", "positions": ["SW", "DC"],
+      "key": ["Passing", "Composure", "Decisions", "Positioning"],
+      "important": ["Vision", "Anticipation", "Technique", "FirstTouch", "Tackling", "Marking"],
+      "useful": ["Dribbling", "Pace", "Teamwork", "Concentration"] },
     { "code": "BPCB", "name": "Ball-Playing Centre-Back", "positions": ["DC"],
       "key": ["Marking", "Tackling", "Positioning", "Passing", "Composure"],
       "important": ["Heading", "Anticipation", "Vision", "FirstTouch", "Decisions"],
@@ -64,7 +76,7 @@
 
     { "code": "FB",   "name": "Full-Back", "positions": ["DL", "DR"],
       "key": ["Tackling", "Marking", "Positioning", "Anticipation"],
-      "important": ["Crossing", "Pace", "Stamina", "Concentration", "WorkRate"],
+      "important": ["Crossing", "Pace", "Acceleration", "Stamina", "Concentration", "WorkRate"],
       "useful": ["Passing", "Acceleration", "Teamwork", "Decisions"] },
     { "code": "WB",   "name": "Wing-Back", "positions": ["WBL", "WBR", "DL", "DR"],
       "key": ["Crossing", "Stamina", "Pace", "WorkRate"],
@@ -112,6 +124,10 @@
       "important": ["FirstTouch", "Dribbling", "Acceleration", "Technique", "Decisions"],
       "useful": ["Passing", "LongShots", "Pace", "Stamina"] },
 
+    { "code": "WM",   "name": "Wide Midfielder", "positions": ["ML", "MR"],
+      "key": ["Stamina", "WorkRate", "Passing", "Teamwork"],
+      "important": ["Crossing", "Tackling", "Decisions", "Positioning", "FirstTouch"],
+      "useful": ["Pace", "Technique", "Vision", "Anticipation"] },
     { "code": "W",    "name": "Winger", "positions": ["ML", "MR", "AML", "AMR"],
       "key": ["Crossing", "Dribbling", "Pace", "Acceleration"],
       "important": ["Technique", "FirstTouch", "Agility", "OffTheBall", "Stamina"],
@@ -133,6 +149,18 @@
       "important": ["Dribbling", "Anticipation", "Composure", "FirstTouch", "Heading"],
       "useful": ["Crossing", "Technique", "Strength", "WorkRate"] },
 
+    { "code": "SHS",  "name": "Shadow Striker", "positions": ["AMC"],
+      "key": ["OffTheBall", "Finishing", "Anticipation", "Acceleration"],
+      "important": ["FirstTouch", "Composure", "Dribbling", "Technique", "WorkRate"],
+      "useful": ["Pace", "Decisions", "Stamina", "Balance"] },
+    { "code": "FR",   "name": "Free Role", "positions": ["AMC", "AML", "AMR"],
+      "key": ["Flair", "Vision", "Technique", "Dribbling"],
+      "important": ["Passing", "FirstTouch", "OffTheBall", "Composure", "Decisions"],
+      "useful": ["Agility", "Balance", "Finishing", "Acceleration"] },
+    { "code": "WTF",  "name": "Wide Target Forward", "positions": ["AML", "AMR"],
+      "key": ["Heading", "JumpingReach", "Strength", "Bravery"],
+      "important": ["OffTheBall", "Finishing", "Balance", "Stamina", "FirstTouch"],
+      "useful": ["Crossing", "Teamwork", "WorkRate", "Anticipation"] },
     { "code": "POA",  "name": "Poacher", "positions": ["ST"],
       "key": ["Finishing", "OffTheBall", "Anticipation", "Composure"],
       "important": ["Acceleration", "FirstTouch", "Decisions", "Pace"],
@@ -163,4 +191,5 @@
       "useful": ["Strength", "Pace", "Decisions", "FirstTouch"] }
   ]
 }
+
 

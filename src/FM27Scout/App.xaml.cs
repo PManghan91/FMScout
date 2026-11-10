@@ -10,6 +10,17 @@ public partial class App : Application
 {
     void App_Startup(object sender, StartupEventArgs e)
     {
+        // never crash with a raw exception: show a friendly dialog (details for bug reports)
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            ex.Handled = true;
+            try { ErrorDialog.Show(MainWindow ?? new Window(), "FM27 Scout – unexpected error", "Something went wrong. FM27 Scout will try to carry on; if it misbehaves, restart it.", ex.Exception.ToString()); } catch { }
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+        {
+            try { File.WriteAllText(Path.Combine(AppPaths.Data, "crash.txt"), ex.ExceptionObject?.ToString()); } catch { }
+        };
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, ex) => ex.SetObserved();
         if (e.Args.Length > 0 && e.Args[0] == "--selftest")
         {
             var outDir = e.Args.Length > 1 ? e.Args[1] : Path.GetTempPath();
@@ -114,6 +125,7 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
 
 
 

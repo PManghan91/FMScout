@@ -75,6 +75,64 @@ Results open in the Players tab with a **Gain** column (e.g. "+6 now" or "+9 at 
 ### Shortlist
 Add players with right-click › Add to shortlist. Filter with the sidebar's **Shortlist only** box or the query `shortlist`. It is saved in `%APPDATA%\FM27Scout\shortlist.json`.
 
+### Shortlist tab
+The **★ Shortlist (n)** tab next to Players shows every shortlisted player, whatever the Players filters are. It supports the same right-click actions, double-click to open the profile, and a **Remove selected** button. The "★ Shortlist only" toggle also sits at the top of the sidebar under **Quick filters**.
+
+### Quick filters (top of the sidebar)
+★ Shortlist only · Gettable for us · Newgens only · Bargains only · Hide WP unlikely · Hide can't sign.
+
+### Query bar additions
+* **Relative dates:** `expires<=6m`, `expires<=+1y`, `joined>=-12m` (all relative to the game date). A plain year still works: `contract<=2037`.
+* **Relative to your squad:** `ca>=squad`, `pa>=squad+20`, where "squad" is the median CA of your top 22 players.
+* **Ranges:** `age:18-23`, `ca:120-140`.
+* **Negation:** `-newgen`, `!bargain`, `-risky`.
+* **New terms:**
+  * `loan`: loan targets.
+  * `precontract`, `cansign`.
+  * `risky`, `risk:injury`.
+  * `nfs`: not for sale.
+  * `improving`; `dca>=5` (CA change this season).
+  * `gain>=5`: gain over your squad.
+  * `vfm`, `vfmpot`, `fee<=2m`.
+
+### Transfer rules (follow the My club country)
+* **UK clubs:**
+  * Foreign under-18s (no UK or Irish passport, not already at a UK club) show **Can't sign**. They get Join 0 and are left out of the finders.
+  * A player at another UK club whose contract ends within 6 months **can't sign a pre-contract**. He stays "free from 1 Jul", so the fee still applies now.
+  * Under-24s leaving a UK club are flagged: **compensation may be due**.
+* **Elsewhere:** international transfers of under-18s are blocked, except 16–17-year-olds moving within the EU.
+* Contracts ending within 6 months with a foreign club are **pre-contracts**: free.
+* See the **Transfer rule** column and the profile.
+
+### Value for money and bargains
+* **Value for money** = his role-score **gain over your best player** in his best role (or in his position group, whichever is higher), per £1M of estimated fee plus 2 years' wages. **VfM @pot** does the same with potential scores.
+* FM's £300M "not for sale" marker shows as **Not for sale**. It is excluded from value medians and treated as unaffordable.
+* **Bargain** = free agent, pre-contract, "free in summer" (UK), or valued at half of typical or less.
+
+### Risk flags
+The **Risks** column, profile and Compare flag hidden-attribute and personality risks:
+* Injury prone (Injury Proneness ≥ 14)
+* Inconsistent (Consistency ≤ 8)
+* Big-game nerves (Important Matches ≤ 8)
+* Dirty (Dirtiness ≥ 15)
+* Hot-headed (Temperament ≤ 6)
+* Controversial (Controversy ≥ 15)
+* Unprofessional (Professionalism ≤ 6)
+
+### Development tracking
+* Every load saves a compact snapshot (CA, PA, attribute total per player) under `%APPDATA%\FM27Scout\history\`.
+* **ΔCA season**, **ΔAttr season** and **ΔCA last** show progress since your first load this season (seasons start 1 July) and since your previous load on a different game day.
+* Built-in search: "Biggest improvers this season". There is also a **Development** column preset.
+
+### Find upgrade settings
+Right-click › Find upgrade opens a small dialog:
+* minimum score gain (default **+5**)
+* minimum Join %
+* maximum fee and wage
+* age range
+
+Upgrades are judged on the **role score**, not CA, so specialists can qualify. Players you can't sign are excluded.
+
 ### Multi-select
 Players, Squad, Staff and the finder results support Ctrl+click (one at a time), Shift+click (a range) and Ctrl+A. Right-click › Add/Remove N to comparison (it asks before replacing when more than 4) and Add/Remove N to shortlist apply to every selected player. Double-click still opens one profile.
 
@@ -84,7 +142,7 @@ Players, Squad, Staff and the finder results support Ctrl+click (one at a time),
   * **No:** he holds a passport of your club's country.
   * **No:** in the UK, any British or Irish passport counts.
   * **No (EU):** an EU passport, when your club is in the EU.
-  * **For English clubs otherwise:** an **estimate** of the GBE points system, from world reputation, current league strength, CA and a youth/high-potential concession. It reads *Needed – likely OK*, *Needed – borderline* or *Needed – unlikely*.
+  * **For English clubs otherwise:** an **estimate** of the GBE points system, from world reputation, current league strength and CA (international caps aren't decoded yet). It reads *Needed – likely OK*, *Needed – borderline* or *Needed – unlikely*.
   * **Non-EU:** elsewhere outside the EU.
 * FM decides the real permit when a transfer is agreed. The profile shows the passports and the reasoning.
 * Query: `wp:needed`, `wp:none`, `wp:ok`, `wp:unlikely`.
@@ -112,7 +170,7 @@ Squads built from the loaded players: player count, average and best CA, average
 * Season-by-competition stats (average rating, xG, assists) aren't decoded yet.
 
 ### Column presets and shortcuts
-* **Columns ▾ › Presets:** Overview, Attributes, Goalkeeping, Moneyball, Contract & value, Hidden & personality.
+* **Columns ▾ › Presets:** Overview (used on first run), Development, Attributes, Goalkeeping, Moneyball, Contract & value, Hidden & personality.
 * **Shortcuts:** F5 or Ctrl+L loads or refreshes; Ctrl+F jumps to the query bar; Ctrl+1–5 switches tabs; Esc in the query bar clears it.
 
 ### Patch Doctor (after an FM update)
@@ -134,7 +192,23 @@ Squads built from the loaded players: player count, average and best CA, average
   * That gain is spread over the attributes that matter most for the player's position group.
   * Physical attributes develop less after 23.
   * The role scores are then recalculated on the projected attributes. This is an estimate: FM decides development during play.
+* New roles: Stopping / Covering Centre-Back, Libero (SW), Wide Midfielder, Shadow Striker, Free Role, Wide Target Forward. Familiarity follows FM's bands (20 / 15 / 10 / 5).
 * Everything lives in `%APPDATA%\FM27Scout\roles.json`. **Roles…** opens it. Edit it, then press Load from game to recalculate. Delete the file to get the defaults back.
+
+## Reliability
+* **Faster load:** each person record is read in one go, strings of shared objects (clubs, nations, competitions, names) are cached, and players are read in parallel. A full load takes about 5 s, down from about 12 s.
+* **Checked person list:** every known static path to it is tried and checked, and a path is used only if its entries really are game objects.
+* **Failed loads are reported, not hidden:** a load fails loudly if more than 5% of players can't be read, or if FM closes mid-read.
+* **Friendly errors** for:
+  * FM not running
+  * FM still starting
+  * no save loaded
+  * access denied (run as admin)
+  * more than one `fm` process
+* **No crashes:** global error handlers show a friendly dialog instead of crashing.
+* **Safe settings files:** they are written atomically (temp file + replace + `.bak`). A corrupt file is renamed `*.broken-<time>`, not overwritten.
+* **Layout files:** a doctor-generated layout never overrides a built-in one for the same build. Problems reading an override file are shown in the status bar.
+* **Tests:** `tests/FM27Scout.Tests` covers dates and ages (including 29 February), the query language, money parsing and validation of the shipped layout. GitHub Actions (`.github/workflows/build.yml`) builds, tests and publishes the exe as an artifact.
 
 ## Patching for a new FM build
 On an unknown engine build, the app says so and doesn't load. Put an updated `fm27-layout.json` next to `FM27Scout.exe` and it is used in place of the built-in one, with no rebuild needed. The probe's exploration commands help re-derive the offsets (see README).

@@ -21,6 +21,9 @@ public sealed class PlayerRow
     public int PA => Source.PotentialAbility;
     public int Height => Source.HeightCm;
     public long Value => Source.Value;
+    /// <summary>FM uses exactly £300M as a "not for sale / untouchable" marker (e.g. Haaland), not a real valuation.</summary>
+    public bool NotForSale => Source.Value == 300_000_000;
+    public double TypicalWage { get; set; }
     public long Wage => Source.WeeklyWage;
     public DateOnly? ContractExpiry => Source.ContractExpiry;
     /// <summary>Date the current contract started (for youth intake kids: the intake date).</summary>
@@ -62,7 +65,46 @@ public sealed class PlayerRow
     public int Loyalty => Source.Personality.Length > 2 ? Source.Personality[global::FM27Scout.Model.Personality.Loyalty] : 0;
     public int Professionalism => Source.Personality.Length > 4 ? Source.Personality[global::FM27Scout.Model.Personality.Professionalism] : 0;
     public string WageText => Wage > 0 ? MoneyText.Format(Wage) : "-";
-    public string ValueText => Value > 0 ? MoneyText.Format(Value) : "-";
+    public string ValueText => NotForSale ? "Not for sale" : Value > 0 ? MoneyText.Format(Value) : "-";
+
+    // ---- club-dependent (recomputed when "My club" changes)
+    /// <summary>Transfer-rule note for your club's country, e.g. "Can't sign: foreign U18", "No pre-contract: free from 1 Jul".</summary>
+    public string TransferRule { get; set; } = "";
+    public bool CanSign { get; set; } = true;
+    /// <summary>A pre-contract (free transfer agreed in advance) is possible because his contract ends within 6 months.</summary>
+    public bool PreContract { get; set; }
+    /// <summary>Estimated fee in £ (0 = free / pre-contract; NaN = not for sale).</summary>
+    public double Fee { get; set; }
+    /// <summary>Role-score gain over your best player in that role, per £1M of fee + 2 years' wages (current ability).</summary>
+    public double VfmPot { get; set; }
+    public double GainOverSquad { get; set; }
+
+    // ---- risk flags from hidden attributes / personality
+    public string RiskText
+    {
+        get
+        {
+            var r = new List<string>();
+            int Ai(string n) { int i = Attr.Index(n); return i >= 0 ? A[i] : 10; }
+            if (Ai("InjuryProneness") >= 14) r.Add("Injury prone");
+            if (Ai("Consistency") <= 8) r.Add("Inconsistent");
+            if (Ai("ImportantMatches") <= 8) r.Add("Big-game nerves");
+            if (Ai("Dirtiness") >= 15) r.Add("Dirty");
+            if (Source.Personality.Length > 7)
+            {
+                if (Source.Personality[global::FM27Scout.Model.Personality.Temperament] <= 6) r.Add("Hot-headed");
+                if (Source.Personality[global::FM27Scout.Model.Personality.Controversy] >= 15) r.Add("Controversial");
+                if (Source.Personality[global::FM27Scout.Model.Personality.Professionalism] <= 6) r.Add("Unprofessional");
+            }
+            return string.Join(", ", r);
+        }
+    }
+    public int RiskCount => RiskText.Length == 0 ? 0 : RiskText.Count(ch => ch == ',') + 1;
+
+    // ---- development since previous loads (see DevHistory)
+    public int? DeltaCaLast { get; set; }
+    public int? DeltaCaSeason { get; set; }
+    public int? DeltaAttrSeason { get; set; }
 
     /// <summary>"Would join" estimate 0-100 for the selected club (-1 = already ours).</summary>
     public double Join { get; set; }
@@ -120,6 +162,7 @@ public static class Attr
     public static readonly string[] Goalkeeping = ["AerialReach", "CommandOfArea", "Communication", "Eccentricity", "FirstTouch", "Handling", "Kicking", "OneOnOnes", "Passing", "Punching", "Reflexes", "RushingOut", "Throwing"];
     public static readonly string[] Hidden = ["Consistency", "Dirtiness", "ImportantMatches", "InjuryProneness", "Versatility"];
 }
+
 
 
 

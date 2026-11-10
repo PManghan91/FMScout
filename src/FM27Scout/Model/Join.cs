@@ -44,7 +44,9 @@ public sealed class JoinModel
         try { m = JsonSerializer.Deserialize<JoinModel>(File.ReadAllText(path), Opts)!; }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"join.json could not be read ({ex.Message}). Using built-in defaults.", "FM27 Scout");
+            var moved = FMScout.Reader.AtomicFile.MoveAside(path);
+            System.Windows.MessageBox.Show($"join.json could not be read ({ex.Message}).\n\nIt was renamed to {moved} so your edits aren't lost; the built-in defaults are used and a fresh join.json was created.", "FM27 Scout");
+            File.WriteAllText(path, Embedded.Read("join.json"));
             m = JsonSerializer.Deserialize<JoinModel>(Embedded.Read("join.json"), Opts)!;
         }
         m.SourcePath = path;
@@ -64,6 +66,11 @@ public sealed class JoinModel
         if (p.Club == my.Name)
         {
             p.Join = -1; p.JoinLabel = "Our player"; p.JoinReasons = ["Already at your club."];
+            return;
+        }
+        if (!p.CanSign)
+        {
+            p.Join = 0; p.JoinLabel = "Can't sign"; p.JoinReasons = [p.TransferRule];
             return;
         }
         double s = Base;
@@ -106,7 +113,8 @@ public sealed class JoinModel
         else if (p.ContractExpiry is { } exp)
         {
             int months = (exp.Year - today.Year) * 12 + exp.Month - today.Month;
-            if (months <= 6) { s += Contract.Within6Months; reasons.Add($"{Pts(Contract.Within6Months)} Contract expires {exp:MMM yyyy} (≤ 6 months)"); }
+            if (months <= 6 && p.PreContract) { s += Contract.Within6Months; reasons.Add($"{Pts(Contract.Within6Months)} Contract expires {exp:MMM yyyy}: pre-contract possible"); }
+            else if (months <= 6) { s += Contract.Within12Months; reasons.Add($"{Pts(Contract.Within12Months)} Contract expires {exp:MMM yyyy} (no pre-contract from a UK club: free once it ends)"); }
             else if (months <= 12) { s += Contract.Within12Months; reasons.Add($"{Pts(Contract.Within12Months)} Contract expires {exp:MMM yyyy} (≤ 12 months)"); }
         }
 
@@ -124,11 +132,12 @@ public sealed class JoinModel
             else if (ratio > Wage.OverTopEarnerFactor) { s += Wage.OverTopEarnerPoints; reasons.Add($"{Pts(Wage.OverTopEarnerPoints)} Earns {MoneyText.Format(p.Wage)} p/w, more than your top earner ({MoneyText.Format(my.TopWage)})"); }
             else if (ratio <= 1) { s += Wage.WithinTopEarnerPoints; reasons.Add($"{Pts(Wage.WithinTopEarnerPoints)} Wage {MoneyText.Format(p.Wage)} p/w fits your structure"); }
         }
-        bool cheapExit = p.Source.Club == null || (p.ContractExpiry is { } e2 && (e2.Year - today.Year) * 12 + e2.Month - today.Month <= 6);
-        if (!cheapExit && my.SquadValue > 0 && p.Value > my.SquadValue * Fee.OverSquadValueShare)
+        if (double.IsNaN(p.Fee)) { s += Fee.Points; reasons.Add($"{Pts(Fee.Points)} Not for sale"); }
+        else if (p.Fee > 0 && my.SquadValue > 0 && p.Fee > my.SquadValue * Fee.OverSquadValueShare)
         {
-            s += Fee.Points; reasons.Add($"{Pts(Fee.Points)} Value {MoneyText.Format(p.Value)} is large vs your squad value {MoneyText.Format(my.SquadValue)}");
+            s += Fee.Points; reasons.Add($"{Pts(Fee.Points)} Fee ~{MoneyText.Format((long)p.Fee)} is large vs your squad value {MoneyText.Format(my.SquadValue)}");
         }
+        if (p.TransferRule.Contains("compensation")) reasons.Add("Note: under-24 from a UK club - training compensation may be due");
 
         reasons.Add("Not included: disliked clubs/people, real budgets (not decoded yet).");
         p.Join = Math.Clamp(s, 0, 100);
@@ -138,5 +147,7 @@ public sealed class JoinModel
 
     static string Pts(double v) => v >= 0 ? $"+{v:0}" : $"{v:0}";
 }
+
+
 
 

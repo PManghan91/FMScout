@@ -42,7 +42,9 @@ public sealed class RoleSet
         try { set = JsonSerializer.Deserialize<RoleSet>(File.ReadAllText(path), Opts)!; }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"roles.json could not be read ({ex.Message}). Using built-in defaults.", "FM27 Scout");
+            var moved = FMScout.Reader.AtomicFile.MoveAside(path);
+            System.Windows.MessageBox.Show($"roles.json could not be read ({ex.Message}).\n\nIt was renamed to {moved} so your edits aren't lost; the built-in defaults are used and a fresh roles.json was created.", "FM27 Scout");
+            File.WriteAllText(path, Embedded.Read("roles.json"));
             set = JsonSerializer.Deserialize<RoleSet>(Embedded.Read("roles.json"), Opts)!;
         }
         set.SourcePath = path;
@@ -139,6 +141,7 @@ public sealed class RoleSet
     public int IndexOf(string codeOrName) => Array.FindIndex(Roles, r =>
         r.Code.Equals(codeOrName, StringComparison.OrdinalIgnoreCase) || r.Name.Equals(codeOrName, StringComparison.OrdinalIgnoreCase));
 }
+
 
 
 

@@ -46,6 +46,17 @@ public sealed class FilterState
     public int UpgradeIncCa { get; set; }
     public int UpgradeIncPa { get; set; }
     public bool ShortlistOnly { get; set; }
+    public bool NewgensOnly { get; set; }
+    public bool BargainsOnly { get; set; }
+    public bool HideWpUnlikely { get; set; }
+    public bool HideCantSign { get; set; }
+    // Find upgrade settings (editable in the dialog)
+    public double UpgradeMargin { get; set; } = 5;
+    public double? UpgradeMaxFee { get; set; }
+    public double? UpgradeMaxWage { get; set; }
+    public int? UpgradeAgeMin { get; set; }
+    public int? UpgradeAgeMax { get; set; }
+    public double UpgradeMinJoin { get; set; } = 50;
     public string? UpgradeClub { get; set; }
     public string Query { get; set; } = "";
     /// <summary>Optional default sort for built-in searches (column key, descending unless prefixed with "+").</summary>
@@ -67,10 +78,10 @@ public static class SavedSearches
     public static List<SavedSearch> Load()
     {
         try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<List<SavedSearch>>(File.ReadAllText(FilePath)) ?? [] : []; }
-        catch { return []; }
+        catch { FMScout.Reader.AtomicFile.MoveAside(FilePath); return []; } // keep the broken file for inspection, don't overwrite it
     }
 
-    public static void Save(List<SavedSearch> list) => File.WriteAllText(FilePath, JsonSerializer.Serialize(list, Opts));
+    public static void Save(List<SavedSearch> list) => FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(list, Opts));
 }
 
 public sealed class QueryError(string msg) : Exception(msg);
@@ -81,6 +92,8 @@ public sealed class QueryError(string msg) : Exception(msg);
 ///   age&lt;=21 pa&gt;=150 pos:ST pos:D,DM league:"Premier League" club:arsenal nation:brazil
 ///   value&lt;=20m wage&lt;50k finishing&gt;=15 poa&gt;=70 (role code = role score) pot.poa&gt;=80 best&gt;=75
 ///   contract&lt;=2037 foot:left gk   (bare words match the name)
+///   expires&lt;=6m joined&gt;=-12m (relative to the game date)  ca&gt;=squad+5 (vs your squad's median CA)  age:18-23 (range)
+///   -newgen / !bargain (negation)  loan  cansign  precontract  risky  risk:injury  nfs  improving  dca&gt;=5
 ///   regen bargain valueratio&lt;=0.5   join&gt;=60 rep&lt;=6000 wrep&gt;=3000 status:"Squad Player" willing:likely
 /// </summary>
 public static class FilterBuilder
@@ -123,6 +136,10 @@ public static class FilterBuilder
         if (f.ContractExpiresBy is int y) preds.Add(p => p.ContractExpiry is { } d && d.Year <= y);
         if (f.FreeAgentsOnly) preds.Add(p => p.Source.Club == null);
         if (f.ShortlistOnly) preds.Add(p => Shortlist.Contains(p.Uid));
+        if (f.NewgensOnly) preds.Add(p => p.IsRegen);
+        if (f.BargainsOnly) preds.Add(p => p.IsBargain);
+        if (f.HideWpUnlikely) preds.Add(p => !p.WpText.Contains("unlikely"));
+        if (f.HideCantSign) preds.Add(p => p.CanSign);
         if (f.GettableOnly) { var gm = f.GettableMin; preds.Add(p => p.Join >= gm); }
 
         foreach (var (name, min) in f.AttributeMin)
@@ -133,8 +150,13 @@ public static class FilterBuilder
 
         if (f.UpgradeForUid != null && Has(f.Role) && roles.IndexOf(f.Role!) is int ur && ur >= 0)
         {
-            var club = f.UpgradeClub; double inc = f.UpgradeIncScore, incPot = f.UpgradeIncPot; int ca = f.UpgradeIncCa, pa = f.UpgradeIncPa;
-            preds.Add(p => p.Uid != f.UpgradeForUid && p.Club != club && p.Join >= 50 && Upgrade.Qualifies(p, ur, inc, incPot, ca, pa));
+            var club = f.UpgradeClub; double inc = f.UpgradeIncScore, incPot = f.UpgradeIncPot; int pa = f.UpgradeIncPa;
+            double margin = f.UpgradeMargin, minJoin = f.UpgradeMinJoin;
+            double maxFee = f.UpgradeMaxFee ?? double.PositiveInfinity, maxWage = f.UpgradeMaxWage ?? double.PositiveInfinity;
+            int ageMin = f.UpgradeAgeMin ?? 0, ageMax = f.UpgradeAgeMax ?? 99;
+            preds.Add(p => p.Uid != f.UpgradeForUid && p.Club != club && p.CanSign && p.Join >= minJoin
+                && !(p.Fee > maxFee) && !double.IsNaN(p.Fee) && p.Wage <= maxWage && (p.Age ?? 0) >= ageMin && (p.Age ?? 0) <= ageMax
+                && Upgrade.Qualifies(p, ur, inc, incPot, pa, margin));
         }
         if (Has(f.Query)) preds.AddRange(ParseQuery(f.Query, roles));
         return p => { foreach (var pr in preds) if (!pr(p)) return false; return true; };
@@ -147,22 +169,45 @@ public static class FilterBuilder
         var res = new List<Func<PlayerRow, bool>>();
         foreach (Match m in Token.Matches(q))
         {
+            bool negate = false;
             if (m.Groups["w"].Success)
             {
                 var w = m.Groups["w"].Value.Trim('"');
-                if (w.Equals("gk", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsGoalkeeper); continue; }
-                if (w.Equals("free", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.Source.Club == null); continue; }
-                if (w.Equals("regen", StringComparison.OrdinalIgnoreCase) || w.Equals("newgen", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsRegen); continue; }
-                if (w.Equals("real", StringComparison.OrdinalIgnoreCase)) { res.Add(p => !p.IsRegen); continue; }
-                if (w.Equals("bargain", StringComparison.OrdinalIgnoreCase)) { res.Add(p => p.IsBargain); continue; }
-                if (w.Equals("shortlist", StringComparison.OrdinalIgnoreCase)) { res.Add(p => Shortlist.Contains(p.Uid)); continue; }
-                res.Add(p => Contains(p.Name, w) || Contains(p.FullName, w) || Contains(p.Source.Name, w));
+                if (w.Length > 1 && (w[0] == '-' || w[0] == '!')) { negate = true; w = w[1..]; }
+                var one = Word(w);
+                res.Add(negate ? p => !one(p) : one);
                 continue;
             }
             string field = m.Groups["f"].Value.ToLowerInvariant(), op = m.Groups["op"].Value, val = m.Groups["v"].Value.Trim('"');
-            res.Add(Field(field, op, val, roles));
+            if (field.Length > 1 && (field[0] == '-' || field[0] == '!')) { negate = true; field = field[1..]; }
+            var pr = Field(field, op, val, roles);
+            res.Add(negate ? p => !pr(p) : pr);
         }
         return res;
+    }
+
+    static Func<PlayerRow, bool> Word(string w)
+    {
+        switch (w.ToLowerInvariant())
+        {
+            case "gk": return p => p.IsGoalkeeper;
+            case "free": return p => p.Source.Club == null;
+            case "regen" or "newgen": return p => p.IsRegen;
+            case "real": return p => !p.IsRegen;
+            case "bargain": return p => p.IsBargain;
+            case "shortlist": return p => Shortlist.Contains(p.Uid);
+            case "cansign" or "signable": return p => p.CanSign;
+            case "precontract": return p => p.PreContract;
+            case "risky": return p => p.RiskCount > 0;
+            case "nfs": return p => p.NotForSale;
+            case "improving": return p => p.DeltaCaSeason > 0;
+            // loan targets: young, not a first-choice at a clearly bigger club, but at least as good as our typical player
+            case "loan" or "loantarget":
+                return p => p.Club != ClubContext.MyClubName && p.Source.Club != null && p.Age <= 21 && p.CanSign
+                    && p.Source.SquadStatus is 4 or 5 or 7 or 10 or 11 or 13 or 14 or 16 or 20
+                    && p.ClubRep >= ClubContext.MyReputation + 800 && p.CA >= ClubContext.SquadMedianCa;
+        }
+        return p => Contains(p.Name, w) || Contains(p.FullName, w) || Contains(p.Source.Name, w);
     }
 
     static Func<PlayerRow, bool> Field(string field, string op, string val, RoleSet roles)
@@ -172,7 +217,7 @@ public static class FilterBuilder
         {
             "name" => p => p.Name + " " + p.FullName, "club" => p => p.Club, "league" or "comp" => p => p.League,
             "nation" or "nat" => p => p.Nation, "foot" => p => p.Foot, "status" => p => p.SquadStatusName,
-            "joinlabel" or "willing" => p => p.JoinLabel, "personality" or "pers" => p => p.PersonalityLabel, "nat2" or "passport" => p => p.Nationalities, "favclub" => p => string.Join(", ", p.Source.FavouredClubs), "outlook" or "development" => p => p.OutlookText, _ => null
+            "joinlabel" or "willing" => p => p.JoinLabel, "personality" or "pers" => p => p.PersonalityLabel, "nat2" or "passport" => p => p.Nationalities, "favclub" => p => string.Join(", ", p.Source.FavouredClubs), "outlook" or "development" => p => p.OutlookText, "risk" => p => p.RiskText, "rule" => p => p.TransferRule, _ => null
         };
         if (text != null)
         {
@@ -203,8 +248,9 @@ public static class FilterBuilder
         {
             "age" => p => p.Age ?? 0, "ca" => p => p.CA, "pa" => p => p.PA, "height" => p => p.Height,
             "value" => p => p.Value, "wage" => p => p.Wage, "best" => p => p.BestRoleScore, "pot" or "potbest" => p => p.BestPotentialScore,
-            "contract" or "expiry" => p => p.ContractExpiry?.Year ?? 0, "join" => p => p.Join,
-            "valueratio" or "vr" => p => p.ValueRatio, "uid" => p => p.Uid, "joined" => p => p.Joined is { } j ? j.Year + j.DayOfYear / 400.0 : 0, "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "ambition" => p => p.Ambition, "apps" or "careerapps" => p => p.CareerApps, "goals" or "careergoals" => p => p.CareerGoals, "gpg" => p => p.GoalsPerGame, "loyalty" => p => p.Loyalty, "professionalism" or "prof" => p => p.Professionalism, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
+            "contract" or "expiry" or "expires" => p => YearFrac(p.ContractExpiry), "join" => p => p.Join, "fee" => p => double.IsNaN(p.Fee) ? double.MaxValue : p.Fee,
+            "gain" => p => p.GainOverSquad, "vfmpot" => p => p.VfmPot, "risks" => p => p.RiskCount, "dca" => p => p.DeltaCaSeason ?? 0, "dcalast" => p => p.DeltaCaLast ?? 0,
+            "valueratio" or "vr" => p => p.ValueRatio, "uid" => p => p.Uid, "joined" => p => YearFrac(p.Joined), "vfm" => p => p.Vfm, "rep" => p => p.CurrentRep, "ambition" => p => p.Ambition, "apps" or "careerapps" => p => p.CareerApps, "goals" or "careergoals" => p => p.CareerGoals, "gpg" => p => p.GoalsPerGame, "loyalty" => p => p.Loyalty, "professionalism" or "prof" => p => p.Professionalism, "hrep" or "homerep" => p => p.HomeRep, "wrep" or "worldrep" => p => p.WorldRep, "clubrep" => p => p.ClubRep, _ => null
         };
         if (num == null)
         {
@@ -222,12 +268,50 @@ public static class FilterBuilder
         }
         if (num == null) throw new QueryError($"unknown field '{field}'");
 
-        double v = field is "value" or "wage" ? Money(val) : double.Parse(val, CultureInfo.InvariantCulture);
+        bool dateField = field is "contract" or "expiry" or "expires" or "joined";
+        // ranges: age:18-23, ca:120-140
+        if (op is ":" or "=" && Regex.Match(val, @"^(-?[\d\.]+)-([\d\.]+)$") is { Success: true } rg)
+        {
+            double lo = Num(rg.Groups[1].Value, field, dateField), hi = Num(rg.Groups[2].Value, field, dateField, upper: true);
+            return p => num(p) >= lo && num(p) <= hi;
+        }
+        double v = Num(val, field, dateField, upper: op is "<=" or "<");
         return op switch
         {
             "<=" => p => num(p) <= v, ">=" => p => num(p) >= v, "<" => p => num(p) < v, ">" => p => num(p) > v,
             "!=" => p => num(p) != v, _ => p => num(p) == v
         };
+    }
+
+    /// <summary>Date as a fractional year (2037.5 = early July 2037); 0 if missing.</summary>
+    public static double YearFrac(DateOnly? d) => d is { } x ? x.Year + (x.DayOfYear - 1) / 366.0 : 0;
+
+    /// <summary>
+    /// Parses a query value. Money: 20m, 500k. Dates: 2037 (a year), or relative to the game date: 6m, +6m, -12m, 1y.
+    /// CA/PA: squad, squad+10, squad-5 (your squad's median CA).
+    /// </summary>
+    static double Num(string val, string field, bool dateField, bool upper = false)
+    {
+        val = val.Trim();
+        if (field is "value" or "wage" or "fee") return Money(val);
+        if (dateField)
+        {
+            var rel = Regex.Match(val, @"^([+-]?)(\d+)([my])$", RegexOptions.IgnoreCase);
+            if (rel.Success)
+            {
+                int n = int.Parse(rel.Groups[2].Value) * (rel.Groups[1].Value == "-" ? -1 : 1);
+                var d = rel.Groups[3].Value.ToLowerInvariant() == "y" ? ClubContext.Today.AddYears(n) : ClubContext.Today.AddMonths(n);
+                return YearFrac(d);
+            }
+            if (int.TryParse(val, out var year) && year is > 1900 and < 3000) return upper ? year + 0.9999 : year; // a plain year
+        }
+        if (field is "ca" or "pa" && val.StartsWith("squad", StringComparison.OrdinalIgnoreCase))
+        {
+            var rest = val[5..];
+            return ClubContext.SquadMedianCa + (rest.Length > 0 ? double.Parse(rest, CultureInfo.InvariantCulture) : 0);
+        }
+        if (!double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var r)) throw new QueryError($"bad value '{val}' for {field}");
+        return r;
     }
 
     public static long Money(string s)
@@ -249,15 +333,15 @@ public static class FilterBuilder
 
 
 
-/// <summary>Upgrade rule: better now (+3, higher CA) or, for under-23s, better at potential (+5, higher PA) without being much worse now.</summary>
+/// <summary>Upgrade rule: better in the role now (+margin), or for under-23s better at potential (+5, higher PA) without being much worse now.</summary>
 public static class Upgrade
 {
     public const double NowMargin = 3, PotMargin = 5, YoungMaxDrop = 3; public const int YoungAge = 23;
 
-    public static bool Qualifies(PlayerRow p, int ri, double inc, double incPot, int incCa, int incPa)
+    public static bool Qualifies(PlayerRow p, int ri, double inc, double incPot, int incPa, double margin)
     {
         double now = p.RoleScores[ri], pot = p.PotentialRoleScores[ri];
-        bool better = now >= inc + NowMargin && p.CA > incCa;
+        bool better = now >= inc + margin; // role score, not CA (specialists can be upgrades with lower CA)
         bool young = p.Age < YoungAge && pot >= incPot + PotMargin && now >= inc - YoungMaxDrop && p.PA > incPa;
         if (better) { p.Gain = now - inc; p.GainText = $"+{now - inc:F0} now"; }
         else if (young) { p.Gain = pot - incPot; p.GainText = $"+{pot - incPot:F0} at potential"; }
@@ -271,11 +355,14 @@ public static class Shortlist
     static string FilePath => Path.Combine(AppPaths.Data, "shortlist.json");
     static HashSet<uint>? _ids;
     static HashSet<uint> Ids => _ids ??= Load();
-    static HashSet<uint> Load() { try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<HashSet<uint>>(File.ReadAllText(FilePath)) ?? [] : []; } catch { return []; } }
+    static HashSet<uint> Load() { try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<HashSet<uint>>(File.ReadAllText(FilePath)) ?? [] : []; } catch { FMScout.Reader.AtomicFile.MoveAside(FilePath); return []; } }
     public static bool Contains(uint uid) => Ids.Contains(uid);
-    public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); File.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
+    public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
     public static int Count => Ids.Count;
 }
+
+
+
 
 
 

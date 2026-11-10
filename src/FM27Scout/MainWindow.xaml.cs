@@ -8,6 +8,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using FM27Scout.Model;
+using FMScout.Reader;
 
 namespace FM27Scout;
 
@@ -41,8 +42,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        var (layouts, _) = GameLoader.LoadLayouts();
-        var first = layouts.Values.First();
+        var (layouts, _, _) = GameLoader.LoadLayouts();
+        var first = GameLoader.NewestTemplate(layouts);
         Attr.Init(first.AttributeNames);
         Model.Positions.Names = first.PositionNames;
         _roles = RoleSet.LoadUserOrDefault();
@@ -50,11 +51,13 @@ public partial class MainWindow : Window
 
         BuildSidebar();
         BuildColumns();
+        if (!File.Exists(SettingsPath)) ApplyColumnPreset(ColumnPresets[0].Keys); // first run: the compact Overview preset
         LoadSettings();
         RefreshSaved();
         AttachContextMenus();
         AttachHeaderMenu();
-        foreach (var g in new[] { SquadGrid, StaffGrid, ClubGrid }) AttachSimpleHeaderMenu(g);
+        foreach (var g in new[] { SquadGrid, StaffGrid, ClubGrid, ShortlistGrid }) AttachSimpleHeaderMenu(g);
+        UpdateShortlistTab();
         RenderCompare();
         QueryBox.TextChanged += (_, _) => QueryHint.Visibility = QueryBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Closing += (_, _) => SaveSettings();
@@ -136,11 +139,14 @@ public partial class MainWindow : Window
             Role = role is { Code: not "-" } ? role.Code : null, RoleMin = D(FRoleMin), RolePotentialMin = D(FRolePotMin),
             Club = S(FClub), League = S(FLeague), ValueMax = S(FValueMax), WageMax = S(FWageMax), ContractExpiresBy = I(FContract),
             FreeAgentsOnly = FFree.IsChecked == true, GettableOnly = FGettable.IsChecked == true, ShortlistOnly = FShortlist.IsChecked == true,
+            NewgensOnly = FNewgens.IsChecked == true, BargainsOnly = FBargains.IsChecked == true, HideWpUnlikely = FHideWp.IsChecked == true, HideCantSign = FHideCantSign.IsChecked == true,
             AttributeMin = _attrBoxes.Where(kv => int.TryParse(kv.Value.Text, out var v) && v > 0).ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value.Text)),
             Query = QueryBox.Text.Trim(),
             UpgradeForUid = _upgrade?.UpgradeForUid, UpgradeForName = _upgrade?.UpgradeForName, UpgradeMinScore = _upgrade?.UpgradeMinScore ?? 0,
             UpgradeMinCa = _upgrade?.UpgradeMinCa ?? 0, UpgradeMinPa = _upgrade?.UpgradeMinPa ?? 0, UpgradeClub = _upgrade?.UpgradeClub,
             UpgradeIncScore = _upgrade?.UpgradeIncScore ?? 0, UpgradeIncPot = _upgrade?.UpgradeIncPot ?? 0, UpgradeIncCa = _upgrade?.UpgradeIncCa ?? 0, UpgradeIncPa = _upgrade?.UpgradeIncPa ?? 0,
+            UpgradeMargin = _upgrade?.UpgradeMargin ?? 5, UpgradeMaxFee = _upgrade?.UpgradeMaxFee, UpgradeMaxWage = _upgrade?.UpgradeMaxWage,
+            UpgradeAgeMin = _upgrade?.UpgradeAgeMin, UpgradeAgeMax = _upgrade?.UpgradeAgeMax, UpgradeMinJoin = _upgrade?.UpgradeMinJoin ?? 50,
         };
     }
 
@@ -156,6 +162,7 @@ public partial class MainWindow : Window
         FRoleMin.Text = f.RoleMin?.ToString() ?? ""; FRolePotMin.Text = f.RolePotentialMin?.ToString() ?? "";
         FClub.Text = f.Club ?? ""; FLeague.Text = f.League ?? ""; FValueMax.Text = f.ValueMax ?? ""; FWageMax.Text = f.WageMax ?? "";
         FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly; FGettable.IsChecked = f.GettableOnly; FShortlist.IsChecked = f.ShortlistOnly;
+        FNewgens.IsChecked = f.NewgensOnly; FBargains.IsChecked = f.BargainsOnly; FHideWp.IsChecked = f.HideWpUnlikely; FHideCantSign.IsChecked = f.HideCantSign;
         foreach (var (k, tb) in _attrBoxes) tb.Text = f.AttributeMin.TryGetValue(k, out var v) ? v.ToString() : "";
         QueryBox.Text = f.Query;
     }
@@ -190,7 +197,7 @@ public partial class MainWindow : Window
         _view = _all.Where(pred).ToList();
         if (_gainCol != null) _gainCol.Visibility = _upgrade != null ? Visibility.Visible : Visibility.Collapsed;
         SortView();
-        CountText.Text = (_upgrade != null ? $"Upgrades for {_upgrade.UpgradeForName} as {FRole.SelectedItem} (his {_upgrade.UpgradeIncScore:F0}/{_upgrade.UpgradeIncPot:F0}): +3 now with higher CA, or under-23 +5 at potential with higher PA · Join ≥ 50 · Reset to clear · " : "")
+        CountText.Text = (_upgrade != null ? $"Upgrades for {_upgrade.UpgradeForName} as {FRole.SelectedItem} (his {_upgrade.UpgradeIncScore:F0}/{_upgrade.UpgradeIncPot:F0}): +{_upgrade.UpgradeMargin:F0} now, or under-23 +5 at potential with higher PA · Join ≥ {_upgrade.UpgradeMinJoin:F0} · Reset to clear · " : "")
                          + $"{_view.Count:N0} of {_all.Count:N0} players";
     }
 
@@ -251,7 +258,21 @@ public partial class MainWindow : Window
         Text("joined", "Joined", "Club & contract", nameof(PlayerRow.Joined), p => p.Joined, visible: false, fmt: "dd/MM/yyyy")
             .HeaderStyle = HeaderTip("Start of his current contract (for youth-intake kids this is the intake date).");
         Text("vfm", "Value for money", "Club & contract", nameof(PlayerRow.Vfm), p => p.Vfm, visible: false, fmt: "F1", style: scoreStyle)
-            .HeaderStyle = HeaderTip("Best potential role score per £1M of fee + 2 years of wages (no fee for free agents / contracts ending within 6 months).");
+            .HeaderStyle = HeaderTip("Role-score GAIN over your best player in his best role, per £1M of estimated fee + 2 years of wages (current ability). 0 = no improvement.");
+        Text("vfmpot", "VfM @pot", "Club & contract", nameof(PlayerRow.VfmPot), p => p.VfmPot, visible: false, fmt: "F1", style: scoreStyle)
+            .HeaderStyle = HeaderTip("Same as Value for money but using potential role scores.");
+        Text("gainsq", "Gain vs squad", "Roles", nameof(PlayerRow.GainOverSquad), p => p.GainOverSquad, visible: false, fmt: "+0;-0;0", style: scoreStyle)
+            .HeaderStyle = HeaderTip("His best role score minus your best player's score in that role.");
+        Text("rule", "Transfer rule", "Would join", nameof(PlayerRow.TransferRule), p => p.TransferRule, visible: false, width: 220)
+            .HeaderStyle = HeaderTip("Rules for your club's country: foreign under-18s, no pre-contracts between UK clubs, under-24 compensation.");
+        Text("risk", "Risks", "Hidden", nameof(PlayerRow.RiskText), p => p.RiskCount, visible: false, width: 170)
+            .HeaderStyle = HeaderTip("From hidden attributes/personality: injury prone (Inj ≥ 14), inconsistent (Cons ≤ 8), big-game nerves (ImpM ≤ 8), dirty, hot-headed, controversial, unprofessional.");
+        Text("dca", "ΔCA season", "Development", nameof(PlayerRow.DeltaCaSeason), p => p.DeltaCaSeason, visible: false, fmt: "+0;-0;0", style: scoreStyle)
+            .HeaderStyle = HeaderTip("CA change since your first load this season (seasons start 1 July).");
+        Text("dcalast", "ΔCA last", "Development", nameof(PlayerRow.DeltaCaLast), p => p.DeltaCaLast, visible: false, fmt: "+0;-0;0", style: scoreStyle)
+            .HeaderStyle = HeaderTip("CA change since your previous load on a different game day.");
+        Text("dattr", "ΔAttr season", "Development", nameof(PlayerRow.DeltaAttrSeason), p => p.DeltaAttrSeason, visible: false, fmt: "+0;-0;0", style: scoreStyle)
+            .HeaderStyle = HeaderTip("Change in the sum of all attributes (1-20) since your first load this season.");
         Text("bargain", "Bargain", "Club & contract", nameof(PlayerRow.BargainText), p => p.IsBargain ? 1 - Math.Min(1, p.ValueRatio) : -1, width: 120)
             .HeaderStyle = HeaderTip("Free agent, contract ending within 6 months, or valued at half (or less) of similar players (same CA band and age).");
         Text("vr", "Value vs typical", "Club & contract", nameof(PlayerRow.ValueRatio), p => p.ValueRatio, visible: false, fmt: "P0", style: scoreStyle)
@@ -270,7 +291,7 @@ public partial class MainWindow : Window
         Text("hrep", "Home rep", "Reputation", nameof(PlayerRow.HomeRep), p => p.HomeRep, visible: false, style: scoreStyle);
         Text("wrep", "World rep", "Reputation", nameof(PlayerRow.WorldRep), p => p.WorldRep, visible: false, style: scoreStyle);
         Text("clubrep", "Club rep", "Reputation", nameof(PlayerRow.ClubRep), p => p.ClubRep, visible: false, style: scoreStyle);
-        Text("value", "Value", "Club & contract", nameof(PlayerRow.Value), p => p.Value, conv: new MoneyText(), style: scoreStyle);
+        Text("value", "Value", "Club & contract", nameof(PlayerRow.ValueText), p => p.NotForSale ? long.MaxValue : p.Value, style: scoreStyle);
         Text("wage", "Wage p/w", "Club & contract", nameof(PlayerRow.Wage), p => p.Wage, conv: new MoneyText(), style: scoreStyle);
         Text("expiry", "Expires", "Club & contract", nameof(PlayerRow.ContractExpiry), p => p.ContractExpiry, fmt: "dd/MM/yyyy");
         Text("height", "Height", "Basics", nameof(PlayerRow.Height), p => p.Height, visible: false);
@@ -337,12 +358,13 @@ public partial class MainWindow : Window
     static readonly string[] Always = ["name", "age", "pos", "club", "ca", "pa"];
     static readonly (string Name, string[] Keys)[] ColumnPresets =
     [
-        ("Overview", ["regen", "league", "nation", "best", "bestscore", "bestpot", "join", "joinlabel", "wp", "value", "wage", "expiry"]),
+        ("Overview", ["regen", "league", "nation", "best", "bestscore", "bestpot", "join", "joinlabel", "wp", "value", "wage", "expiry", "risk"]),
+        ("Development", ["regen", "best", "bestscore", "bestpot", "dca", "dcalast", "dattr", "outlook", "personality", "expiry"]),
         ("Attributes", ["a.*Technical", "a.*Mental", "a.*Physical"]),
         ("Goalkeeping", ["a.*Goalkeeping", "a.*Mental", "a.*Physical"]),
         ("Moneyball", ["apps", "goals", "gpg", "best", "bestscore", "value", "vr", "vfm", "bargain", "join"]),
-        ("Contract & value", ["league", "status", "value", "vr", "wage", "expiry", "joined", "bargain", "join", "joinlabel", "wp"]),
-        ("Hidden & personality", ["personality", "outlook", "a.*Hidden", "rep", "wrep", "best", "bestscore", "bestpot"]),
+        ("Contract & value", ["league", "status", "value", "vr", "vfm", "gainsq", "wage", "expiry", "joined", "bargain", "rule", "join", "joinlabel", "wp"]),
+        ("Hidden & personality", ["personality", "outlook", "risk", "a.*Hidden", "rep", "wrep", "best", "bestscore", "bestpot"]),
     ];
 
     void ApplyColumnPreset(string[] keys)
@@ -485,46 +507,65 @@ public partial class MainWindow : Window
     }
 
     // ------------------------------------------------------------------ loading
+    bool _loading;
+    CancellationTokenSource? _loadCts;
+
     async void Load_Click(object sender, RoutedEventArgs e)
     {
+        if (_loading) return;               // one load at a time (F5 spam, Patch Doctor retry)
+        _loading = true;
         LoadButton.IsEnabled = false;
-        StatusText.Text = "Reading from FM27…";
+        _loadCts = new CancellationTokenSource();
         var progress = new Progress<string>(s => StatusText.Text = s);
         try
         {
-            _roles = RoleSet.LoadUserOrDefault(); // pick up edited weights on every load
-            var roles = _roles;
-            _join = JoinModel.LoadUserOrDefault();
-            var res = await Task.Run(() => GameLoader.Load(roles, progress));
-            _all = res.Players;
-            AfterLoad(res);
-            StatusText.Text = $"FM27 build {res.Build} · game date {res.GameDate:dd/MM/yyyy} · {res.PeopleInDb:N0} people in DB · " +
-                              $"{_all.Count:N0} men's players loaded ({res.ExcludedWomen:N0} women's excluded) in {res.Millis / 1000.0:F1}s · your club: {(res.HumanClubs.Count > 0 ? string.Join(", ", res.HumanClubs) : "not detected")} · layout: {res.LayoutSource}";
-            if (_sortCol == null) { _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending; }
-            ApplyFilters();
-            BuildClubs();
-        }
-        catch (UnknownBuildException ub)
-        {
-            StatusText.Text = $"FM build {ub.Build} is new to FM27 Scout.";
-            var ask = MessageBox.Show(this,
-                $"FM27 has been updated (engine build {ub.Build}) and FM27 Scout doesn't know this build yet.\n\n" +
-                "Run Patch Doctor now? It re-finds the moved data in the running game (read-only), checks it against known players, " +
-                "and saves a new layout. It takes a few minutes; keep FM27 open with your save loaded.",
-                "FM27 Scout – new FM build", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (ask == MessageBoxResult.Yes)
+            for (int attempt = 0; attempt < 2; attempt++)   // second pass only after Patch Doctor has written a new layout
             {
-                var r = await Task.Run(() => GameLoader.RunPatchDoctor(ub.Build, progress));
-                MessageBox.Show(this, (r.Ok ? "Patch Doctor succeeded. Loading now.\n\n" : "Patch Doctor could not fix the layout:\n\n") + string.Join("\n", r.Log),
-                    "FM27 Scout – Patch Doctor", MessageBoxButton.OK, r.Ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
-                if (r.Ok) { LoadButton.IsEnabled = true; Load_Click(sender, e); return; }
+                StatusText.Text = "Reading from FM27…";
+                try
+                {
+                    _roles = RoleSet.LoadUserOrDefault(); // pick up edited weights on every load
+                    _join = JoinModel.LoadUserOrDefault();
+                    var roles = _roles; var ct = _loadCts.Token;
+                    var res = await Task.Run(() => GameLoader.Load(roles, progress, ct));
+                    _all = res.Players;
+                    var devNote = AfterLoad(res);
+                    StatusText.Text = $"FM27 build {res.Build} · game date {res.GameDate:dd/MM/yyyy} · {_all.Count:N0} men's players, {res.Staff.Count:N0} staff in {res.Millis / 1000.0:F1}s · " +
+                                      $"your club: {(res.HumanClubs.Count > 0 ? string.Join(", ", res.HumanClubs) : "not detected - pick it under My club")} · {devNote}" +
+                                      (res.DecodeFailures > 0 ? $" · {res.DecodeFailures:N0} records skipped" : "") +
+                                      (res.LayoutWarnings.Count > 0 ? " · ⚠ " + string.Join(" ", res.LayoutWarnings) : "");
+                    if (_sortCol == null) { _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending; }
+                    ApplyFilters();
+                    BuildClubs();
+                    return;
+                }
+                catch (UnknownBuildException ub)
+                {
+                    StatusText.Text = $"FM build {ub.Build} is new to FM27 Scout.";
+                    var ask = MessageBox.Show(this,
+                        $"FM27 has been updated (engine build {ub.Build}) and FM27 Scout doesn't know this build yet.\n\n" +
+                        "Run Patch Doctor now? It re-finds the moved data in the running game (read-only), checks it against known players, " +
+                        "and saves a new layout. It takes a few minutes; keep FM27 open with your save loaded.",
+                        "FM27 Scout – new FM build", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (ask != MessageBoxResult.Yes || attempt > 0) return;
+                    PatchDoctor.Result r;
+                    try { r = await Task.Run(() => GameLoader.RunPatchDoctor(ub.Build, progress)); }
+                    catch (Exception ex)
+                    {
+                        ErrorDialog.Show(this, "FM27 Scout – Patch Doctor", "Patch Doctor stopped with an error. Make sure FM27 is still running with your save loaded.", ex.ToString());
+                        return;
+                    }
+                    ErrorDialog.Show(this, "FM27 Scout – Patch Doctor", r.Ok ? "Patch Doctor succeeded. Loading now." : "Patch Doctor could not fix the layout. See Details.", string.Join("\n", r.Log));
+                    if (!r.Ok) return;
+                }
             }
         }
         catch (UserFacingException ex)
         {
             StatusText.Text = "Not loaded.";
-            MessageBox.Show(this, ex.Message, "FM27 Scout", MessageBoxButton.OK, MessageBoxImage.Information);
+            ErrorDialog.Show(this, "FM27 Scout", ex.Message, null);
         }
+        catch (OperationCanceledException) { StatusText.Text = "Load cancelled."; }
         catch (Exception ex)
         {
             StatusText.Text = "Load failed. See the message for details.";
@@ -532,9 +573,8 @@ public partial class MainWindow : Window
                 "Something went wrong reading the game. Make sure FM27 is running with your save loaded (not on a menu or loading screen) and try Load from game again.\n\n" +
                 "If it keeps happening, open Details below and send it to me.", ex.ToString());
         }
-        finally { LoadButton.IsEnabled = true; }
+        finally { _loading = false; LoadButton.IsEnabled = true; }
     }
-
     // ------------------------------------------------------------------ self-test hooks (headless, used by --selftest)
     internal LoadResult SelfTestLoad()
     {
@@ -635,7 +675,7 @@ public partial class MainWindow : Window
         foreach (var p in squad.Take(3))
         {
             int ri = Array.IndexOf(p.RoleScores, p.RoleScores.Max());
-            FindUpgrade(p, ri);
+            FindUpgrade(p, ri, askSettings: false);
             sb.AppendLine($"  upgrade for {p.Name} as {_roles.Roles[ri].Name} ({p.RoleScores[ri]:F0}): {_view.Count} found; top: " +
                 string.Join(", ", _view.Take(3).Select(u => $"{u.Name} ({u.Age}, {u.Club}, CA {u.CA}/PA {u.PA}) {u.RoleScores[ri]:F0}/{u.PotentialRoleScores[ri]:F0} {u.GainText}, join {u.Join:F0}")));
             if (_compare.Count < 4) { _compare.Add(p); if (_view.Count > 0) _compare.Add(_view[0]); }
@@ -771,7 +811,7 @@ public partial class MainWindow : Window
 
     void AttachContextMenus()
     {
-        foreach (var grid in new[] { PlayerGrid, SquadGrid })
+        foreach (var grid in new[] { PlayerGrid, SquadGrid, ShortlistGrid })
         {
             var g = grid;
             g.PreviewMouseRightButtonDown += (s, e) =>
@@ -816,6 +856,7 @@ public partial class MainWindow : Window
         sl.Click += (_, _) =>
         {
             foreach (var x in sel) if (Shortlist.Contains(x.Uid) == allShort) Shortlist.Toggle(x.Uid);
+            UpdateShortlistTab();
             StatusText.Text = $"Shortlist: {Shortlist.Count} players (sidebar › Shortlist only, or query: shortlist)";
         };
         menu.Items.Add(sl);
@@ -840,12 +881,18 @@ public partial class MainWindow : Window
         return menu;
     }
 
-    void FindUpgrade(PlayerRow p, int roleIndex)
+    FilterState _upgradeSettings = new();
+
+    void FindUpgrade(PlayerRow p, int roleIndex, bool askSettings = true)
     {
         var role = _roles.Roles[roleIndex];
         var my = MyClubCombo.SelectedItem as MyClub;
+        if (askSettings && !UpgradeDialog.Ask(this, p, role, _upgradeSettings)) return;
+        var st = _upgradeSettings;
         _upgrade = new FilterState
         {
+            UpgradeMargin = st.UpgradeMargin, UpgradeMaxFee = st.UpgradeMaxFee, UpgradeMaxWage = st.UpgradeMaxWage,
+            UpgradeAgeMin = st.UpgradeAgeMin, UpgradeAgeMax = st.UpgradeAgeMax, UpgradeMinJoin = st.UpgradeMinJoin,
             UpgradeForUid = p.Uid, UpgradeForName = p.Name, UpgradeMinScore = Math.Round(p.RoleScores[roleIndex] + UpgradeMargin),
             UpgradeMinCa = p.CA, UpgradeMinPa = p.PA, UpgradeClub = my?.Name,
             UpgradeIncScore = p.RoleScores[roleIndex], UpgradeIncPot = p.PotentialRoleScores[roleIndex], UpgradeIncCa = p.CA, UpgradeIncPa = p.PA,
@@ -920,8 +967,10 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ my club / join estimate
     string? _savedMyClub;
 
-    void AfterLoad(LoadResult res)
+    string AfterLoad(LoadResult res)
     {
+        Attr.Init(res.Layout.AttributeNames);
+        Model.Positions.Names = res.Layout.PositionNames;
         BuildStaff(res.Staff);
         _today = res.GameDate ?? _today;
         var clubs = _all.Where(p => p.Source.Club != null).GroupBy(p => p.Club)
@@ -935,16 +984,25 @@ public partial class MainWindow : Window
         MyClubCombo.SelectedItem = pick;
         _suppressMyClub = false;
         EvaluateJoin();
+        string note;
+        try { note = DevHistory.Apply(_all, $"{string.Join("+", res.HumanClubs)}-{GameLoader.NewgenUidFrom}", _today); }
+        catch (Exception ex) { note = "development tracking unavailable (" + ex.Message + ")"; }
         BuildSquad();
+        UpdateShortlistTab();
+        return note;
     }
 
     bool _suppressMyClub;
-    void MyClub_Changed(object sender, SelectionChangedEventArgs e)
+    async void MyClub_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (_suppressMyClub || MyClubCombo.SelectedItem is not MyClub) return;
-        _savedMyClub = ((MyClub)MyClubCombo.SelectedItem).Name;
-        EvaluateJoin();
+        if (_suppressMyClub || MyClubCombo.SelectedItem is not MyClub my) return;
+        _savedMyClub = my.Name;
+        StatusText.Text = $"Re-evaluating for {my.Name}…";
+        var all = _all; var today = _today; var roles = _roles; var join = _join;
+        await Task.Run(() => ClubContext.Evaluate(all, my, today, roles, join)); // off the UI thread
+        StatusText.Text = $"Now evaluating for {my.Name} ({my.Nation}).";
         BuildSquad();
+        UpdateShortlistTab();
         ApplyFilters();
         if (PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
     }
@@ -952,13 +1010,25 @@ public partial class MainWindow : Window
     void EvaluateJoin()
     {
         if (MyClubCombo.SelectedItem is not MyClub my) return;
-        foreach (var p in _all)
-        {
-            var wp = WorkPermit.Check(p, my.Nation, my.Name);
-            p.WpText = wp.Text; p.WpDetail = wp.Detail; p.WpNeeded = wp.Needed;
-            _join.Evaluate(p, my, _today);
-        }
+        ClubContext.Evaluate(_all, my, _today, _roles, _join);
     }
+
+    // ------------------------------------------------------------------ shortlist tab
+    void UpdateShortlistTab()
+    {
+        var list = _all.Where(p => Shortlist.Contains(p.Uid)).OrderByDescending(p => p.BestRoleScore).ToList();
+        ShortlistGrid.ItemsSource = list;
+        ShortlistTab.Header = $"★ Shortlist ({Shortlist.Count})";
+        ShortlistTitle.Text = _all.Count == 0 ? $"Shortlist: {Shortlist.Count} players (press Load from game to see them)" : $"Shortlist: {list.Count} players";
+    }
+
+    void ShortlistRemove_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var p in ShortlistGrid.SelectedItems.OfType<PlayerRow>().ToList()) if (Shortlist.Contains(p.Uid)) Shortlist.Toggle(p.Uid);
+        UpdateShortlistTab();
+    }
+
+    void ShortlistGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (ShortlistGrid.SelectedItem is PlayerRow p) ShowInPlayers(p); }
 
     // ------------------------------------------------------------------ profile
     void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -996,6 +1066,9 @@ public partial class MainWindow : Window
         if (p.Source.OtherNationalities.Length > 0) Profile.Children.Add(T($"Passports: {p.Nationalities}", 11.5, fg: muted));
         if (p.Source.FavouredClubs.Length > 0) Profile.Children.Add(T($"Favoured clubs: {string.Join(", ", p.Source.FavouredClubs)}", 11.5, fg: muted));
         if (p.WpText.Length > 0) Profile.Children.Add(T($"Work permit: {p.WpText}. {p.WpDetail}", 11.5, fg: p.WpText.Contains("unlikely") ? AttrBrush.Mid : muted));
+        if (p.TransferRule.Length > 0) Profile.Children.Add(T($"Transfer rule: {p.TransferRule}", 11.5, fg: p.CanSign ? muted : AttrBrush.Mid));
+        if (p.RiskText.Length > 0) Profile.Children.Add(T($"Risks: {p.RiskText}", 11.5, fg: AttrBrush.Mid));
+        if (p.DeltaCaSeason is int dc) Profile.Children.Add(T($"Development: CA {dc:+0;-0;0} this season{(p.DeltaCaLast is int dl ? $", {dl:+0;-0;0} since last load" : "")}", 11.5, fg: dc > 0 ? AttrBrush.Good : muted));
 
         var facts = new WrapPanel { Margin = new Thickness(0, 10, 0, 6) };
         void Fact(string k, string v)
@@ -1138,16 +1211,20 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ saved searches / settings / roles
     static readonly List<SavedSearch> Presets =
     [
-        new() { Name = "★ Wonderkid regens (≤19, PA 150+)", Filter = new FilterState { Query = "regen age<=19 pa>=150", Sort = "pa" } },
-        new() { Name = "★ Best young regens we could get", Filter = new FilterState { Query = "regen age<=21 pa>=130", GettableOnly = true, Sort = "bestpot" } },
-        new() { Name = "★ Bargains we could get", Filter = new FilterState { Query = "bargain ca>=100", GettableOnly = true, Sort = "bestpot" } },
-        new() { Name = "★ Undervalued high potential", Filter = new FilterState { Query = "age<=23 pa>=150 valueratio<=0.6", Sort = "pa" } },
-        new() { Name = "★ Latest youth intakes (newgens joined this year)", Filter = new FilterState { Query = "regen age<=17 joined>=2037 pa>=120", Sort = "pa" } },
-        new() { Name = "★ Value for money we could get", Filter = new FilterState { Query = "ca>=100 vfm>=40", GettableOnly = true, Sort = "vfm" } },
-        new() { Name = "★ Moneyball: proven scorers we could get", Filter = new FilterState { Query = "gpg>=0.4 apps>=60 age<=30 ca>=90", GettableOnly = true, Sort = "gpg" } },
-        new() { Name = "★ Moneyball: young players with first-team experience", Filter = new FilterState { Query = "age<=21 apps>=40 pa>=130", Sort = "apps" } },
-        new() { Name = "★ Free agents (CA 100+)", Filter = new FilterState { Query = "free ca>=100", Sort = "bestscore" } },
-        new() { Name = "★ Contracts ending, gettable", Filter = new FilterState { Query = "ca>=100 contract<=2037", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ Wonderkid newgens (≤19, PA 150+)", Filter = new FilterState { Query = "newgen age<=19 pa>=150", Sort = "pa", HideCantSign = true } },
+        new() { Name = "★ Best young newgens we could get", Filter = new FilterState { Query = "newgen age<=21 pa>=squad+20", GettableOnly = true, HideCantSign = true, Sort = "bestpot" } },
+        new() { Name = "★ Loan targets (≤21 at bigger clubs, better than our average)", Filter = new FilterState { Query = "loan", Sort = "bestscore" } },
+        new() { Name = "★ Bargains we could get", Filter = new FilterState { Query = "bargain ca>=squad", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
+        new() { Name = "★ Pre-contracts (free, contract ending ≤ 6 months)", Filter = new FilterState { Query = "precontract ca>=squad", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ Undervalued high potential", Filter = new FilterState { Query = "age<=23 pa>=squad+30 valueratio<=0.6", HideCantSign = true, Sort = "pa" } },
+        new() { Name = "★ Latest youth intakes (joined in the last 12 months)", Filter = new FilterState { Query = "newgen age<=17 joined>=-12m pa>=squad", Sort = "pa" } },
+        new() { Name = "★ Value for money we could get", Filter = new FilterState { Query = "vfm>0 ca>=squad-10", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
+        new() { Name = "★ Biggest improvers this season", Filter = new FilterState { Query = "dca>=5", Sort = "dca" } },
+        new() { Name = "★ Moneyball: proven scorers we could get", Filter = new FilterState { Query = "gpg>=0.4 apps>=60 age<=30 ca>=squad-10", GettableOnly = true, Sort = "gpg" } },
+        new() { Name = "★ Moneyball: young players with first-team experience", Filter = new FilterState { Query = "age<=21 apps>=40 pa>=squad+10", Sort = "apps" } },
+        new() { Name = "★ Free agents", Filter = new FilterState { Query = "free ca>=squad-10", HideCantSign = true, Sort = "bestscore" } },
+        new() { Name = "★ Contracts ending in 12 months, gettable", Filter = new FilterState { Query = "expires<=12m ca>=squad", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ No hidden risks, gettable", Filter = new FilterState { Query = "-risky ca>=squad", GettableOnly = true, Sort = "bestscore" } },
     ];
 
     void RefreshSaved()
@@ -1218,7 +1295,7 @@ public partial class MainWindow : Window
                 if (c != null && i < PlayerGrid.Columns.Count) c.Column.DisplayIndex = i;
             }
         }
-        catch { /* ignore bad settings */ }
+        catch { AtomicFile.MoveAside(SettingsPath); /* bad settings: start fresh, keep the old file aside */ }
     }
 
     void SaveSettings()
@@ -1231,11 +1308,14 @@ public partial class MainWindow : Window
                 Order = _cols.OrderBy(c => c.Column.DisplayIndex).Select(c => c.Key).ToList(),
                 MyClub = _savedMyClub,
             };
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true }));
+            AtomicFile.WriteAllText(SettingsPath, JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch { }
     }
 }
+
+
+
 
 
 

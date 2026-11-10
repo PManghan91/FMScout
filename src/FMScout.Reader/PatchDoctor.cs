@@ -15,15 +15,14 @@ namespace FMScout.Reader;
 /// </summary>
 public static class PatchDoctor
 {
-    sealed record Anchor(string FullName, int Pa, int HeightCm, int StRating, int GkRating);
+    sealed record Anchor(string FullName, int Pa, int HeightCm);
 
-    // Stable facts (PA and height don't change during a save). Any one found is enough; more = more confidence.
-    static readonly Anchor[] Anchors =
+    // Fallback if the template has no anchors. Stable facts: PA and height don't change during a save (a database update may
+    // nudge PA, so a tolerance is used).
+    static readonly Anchor[] DefaultAnchors =
     [
-        new("Erling Braut Haaland", 195, 195, 20, 1),
-        new("Lamine Yamal Nasraoui Ebana", 195, 178, -1, 1),
-        new("Jude Victor William Bellingham", 188, 186, -1, 1),
-        new("Bukayo Ayoyinka Saka", 188, 178, -1, 1),
+        new("Erling Braut Haaland", 195, 195), new("Lamine Yamal Nasraoui Ebana", 195, 178),
+        new("Jude Victor William Bellingham", 188, 186), new("Bukayo Ayoyinka Saka", 188, 178),
     ];
 
     public sealed class Result
@@ -45,8 +44,9 @@ public static class PatchDoctor
 
         // 1) anchors by full name
         Log("Searching for known players by full name…");
+        var anchors = template.Anchors.Length > 0 ? template.Anchors.Select(a => new Anchor(a.FullName, a.Pa, a.HeightCm)).ToArray() : DefaultAnchors;
         var found = new List<(Anchor a, ulong v)>();
-        foreach (var a in Anchors)
+        foreach (var a in anchors)
         {
             var bytes = Encoding.UTF8.GetBytes(a.FullName);
             var pat = BitConverter.GetBytes((uint)bytes.Length).Concat(bytes).ToArray();
@@ -57,10 +57,12 @@ public static class PatchDoctor
                 ulong v = at - (ulong)fullNameOff;
                 if (InMod(m.ReadPtr(v))) { found.Add((a, v)); break; }
             }
-            if (found.Count >= 2) break;
         }
         if (found.Count == 0) { Log("FAILED: none of the anchor players found (full-name offset may have moved)."); return res; }
-        ulong playerVt = m.ReadPtr(found[0].v);
+        // An anchor may have retired or become staff in a long save: majority vote on the class, and drop the odd ones out.
+        ulong playerVt = found.GroupBy(f => m.ReadPtr(f.v)).OrderByDescending(g => g.Count()).First().Key;
+        found = found.Where(f => m.ReadPtr(f.v) == playerVt).ToList();
+        Log($"Anchors found: {string.Join(", ", found.Select(f => f.a.FullName))}");
         long vtDelta = (long)(playerVt - gp.Base) - L.PlayerVtableRva.Value;
         Log($"Player class: vtable RVA 0x{playerVt - gp.Base:X} (was 0x{L.PlayerVtableRva.Value:X}, delta {vtDelta:+#;-#;0})");
         L.PlayerVtableRva = new Hex((long)(playerVt - gp.Base));
@@ -110,6 +112,9 @@ public static class PatchDoctor
             L.PersonDb.RootRva = new Hex((long)best.rva);
             L.PersonDb.VectorBegin = new Hex((long)best.off);
             L.PersonDb.VectorEnd = new Hex((long)best.off + 8);
+            // every other static path found becomes an alternative (FM fills them at different times); the old build's are dropped
+            L.PersonDb.Alternatives = allHits.Where(h => h != best).GroupBy(h => (h.rva, h.off)).Select(g => g.First()).Take(8)
+                .Select(h => new PersonDbLayout { RootRva = new Hex((long)h.rva), VectorBegin = new Hex((long)h.off), VectorEnd = new Hex((long)h.off + 8) }).ToArray();
             vecBegin = best.begin; vecEnd = best.end;
             rootOk = true;
         }
@@ -122,7 +127,7 @@ public static class PatchDoctor
             ulong v = f.v; var PL = lay.Player;
             short pa = m.Read<short>((ulong)((long)v + PL.PotentialAbility.Value));
             byte h = m.Read<byte>((ulong)((long)v + PL.Height.Value));
-            return pa == f.a.Pa && h == f.a.HeightCm;
+            return Math.Abs(pa - f.a.Pa) <= 5 && Math.Abs(h - f.a.HeightCm) <= 2;
         });
         if (BlockOk(L)) Log("Player block offsets still valid (PA and height match the anchors).");
         else
@@ -144,26 +149,45 @@ public static class PatchDoctor
         foreach (var pc in L.ExtraPlayerClasses) pc.VtableRva = Shift(pc.VtableRva, vtDelta);
         L.StaffVtableRva = Shift(L.StaffVtableRva, vtDelta);
         L.HumanManagerVtableRva = Shift(L.HumanManagerVtableRva, vtDelta);
-        long dataDelta = L.PersonDb.RootRva.Value - template.PersonDb.RootRva.Value;
-        L.GameDateRva = Shift(L.GameDateRva, dataDelta);
+        // game date: must be on/after the anchors' latest contract start (and not years later)
+        DateOnly dateLo = new(2026, 1, 1);
+        foreach (var f in found)
+        {
+            ulong con = m.ReadPtr(f.v + (ulong)L.Person.Contract.Value);
+            if (con > 0x10000 && FmGame.DecodeDate(m.Read<uint>(con + (ulong)L.Contract.StartDate.Value)) is { } st && st > dateLo) dateLo = st;
+        }
+        var dateHi = dateLo.AddYears(3);
+        bool PlausibleDate(long rva) => FmGame.DecodeDate(m.Read<uint>(gp.Base + (ulong)rva)) is { } d && d >= dateLo && d <= dateHi;
+        // candidates: the old date RVA shifted by each found static's move relative to the template's statics
+        var deltas = allHits.Select(h => (long)h.rva).SelectMany(r => new[] { template.PersonDb }.Concat(template.PersonDb.Alternatives).Select(t => r - t.RootRva.Value))
+            .Append(0).Distinct().OrderBy(Math.Abs).ToList();
+        long? dateRva = deltas.Select(d => template.GameDateRva.Value + d).Cast<long?>().FirstOrDefault(r => PlausibleDate(r!.Value));
+        if (dateRva == null)
+            for (long d = 0; d <= 0x4000 && dateRva == null; d += 4)
+                foreach (var r in new[] { template.GameDateRva.Value + d, template.GameDateRva.Value - d }) if (PlausibleDate(r)) { dateRva = r; break; }
+        if (dateRva is long dr) { L.GameDateRva = new Hex(dr); Log($"Game date: {FmGame.DecodeDate(m.Read<uint>(gp.Base + (ulong)dr)):dd/MM/yyyy} (RVA 0x{dr:X}). Please check it matches FM."); }
+        else Log("WARNING: game date not found; ages will use today's date.");
         Log($"Players: {Count(L.PlayerVtableRva):N0}; extra player classes: {string.Join(", ", L.ExtraPlayerClasses.Select(pc => Count(pc.VtableRva).ToString("N0")))}; " +
             $"staff: {Count(L.StaffVtableRva):N0}; human managers: {Count(L.HumanManagerVtableRva)}");
         if (Count(L.StaffVtableRva) == 0) Log("WARNING: staff class not found at the shifted RVA (Staff tab will be empty).");
         if (Count(L.HumanManagerVtableRva) == 0) Log("WARNING: human manager class not found (pick your club manually).");
-        ushort year = m.Read<ushort>(gp.Base + (ulong)L.GameDateRva.Value + 2);
-        if (year is < 2026 or > 2100)
+        // 5) sanity-check struct offsets we keep from the template against the anchors
+        foreach (var f in found)
         {
-            // look near the shifted spot for a date-shaped value (u16 day with flags, u16 year 2026-2100)
-            bool fixedDate = false;
-            for (long d = -0x400; d <= 0x400 && !fixedDate; d += 4)
-            {
-                ulong a = (ulong)((long)gp.Base + L.GameDateRva.Value + d);
-                ushort y = m.Read<ushort>(a + 2), day = (ushort)(m.Read<ushort>(a) & 0x1FF);
-                if (y is >= 2026 and <= 2100 && day is >= 1 and <= 366) { L.GameDateRva = new Hex(L.GameDateRva.Value + d); fixedDate = true; Log($"Game date re-found {d:+#;-#;0} bytes away (year {y}) - please sanity-check the date in the status bar."); }
-            }
-            if (!fixedDate) Log($"WARNING: game date not found (read year {year}); ages use today's date.");
+            ulong v = f.v; var P = L.Person;
+            string? full = ReadFmString(m, m.ReadPtr(v + (ulong)P.FullName.Value));
+            if (full != f.a.FullName) Log($"WARNING: full name offset check failed for {f.a.FullName} (read \"{full}\").");
+            ulong nation = m.ReadPtr(v + (ulong)P.Nation.Value);
+            if (ReadFmString(m, m.ReadPtr(nation + (ulong)L.Nation.Name.Value)) == null) Log($"WARNING: nation offset looks wrong for {f.a.FullName}.");
+            ulong con = m.ReadPtr(v + (ulong)P.Contract.Value);
+            ulong team = con > 0x10000 ? m.ReadPtr(con + (ulong)L.Contract.Team.Value) : 0;
+            ulong club = team > 0x10000 ? m.ReadPtr(team + (ulong)L.Team.Club.Value) : 0;
+            if (club > 0x10000 && ReadFmString(m, m.ReadPtr(club + (ulong)L.Club.Name.Value)) == null) Log($"WARNING: club name offset looks wrong for {f.a.FullName}.");
+            ushort rep = club > 0x10000 ? m.Read<ushort>(club + (ulong)L.Club.Reputation.Value) : (ushort)0;
+            if (club > 0x10000 && rep > 10000) Log($"WARNING: club reputation offset looks wrong ({rep}).");
         }
-
+        L.Origin = "doctor";
+        L.Generated = DateTime.Now.ToString("yyyy-MM-dd HH:mm") + $" from template {template.Origin}";
         res.Layout = L; res.Ok = true;
         Log("Done. New layout validated against " + string.Join(", ", found.Select(f => f.a.FullName)) + ".");
         return res;
@@ -193,17 +217,30 @@ public static class PatchDoctor
         return JsonSerializer.Deserialize<BuildLayout>(JsonSerializer.Serialize(l, o), o)!;
     }
 
-    /// <summary>Adds/replaces the build section in a layout JSON file (comments are not preserved in the new section).</summary>
-    public static void Save(string path, string build, BuildLayout layout, string templateJson)
+    static string? ReadFmString(ProcessMemory m, ulong p)
+    {
+        if (!ProcessMemory.IsPtr(p)) return null;
+        uint len = m.Read<uint>(p);
+        if (len == 0 || len > 512) return null;
+        var b = m.ReadBytes(p + 4, (int)len);
+        return b == null ? null : Encoding.UTF8.GetString(b);
+    }
+
+    /// <summary>
+    /// Adds/replaces the build section in the user's (Patch Doctor) layout file. The file only ever holds doctor-generated
+    /// builds, so the commented shipped layout is never rewritten. Written atomically with a .bak; a corrupt file is moved aside.
+    /// </summary>
+    public static void Save(string path, string build, BuildLayout layout, string _templateJson)
     {
         var docOpts = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
-        var root = JsonNode.Parse(File.Exists(path) ? File.ReadAllText(path) : templateJson, documentOptions: docOpts)!.AsObject();
-        var builds = root["builds"]!.AsObject();
+        JsonObject root;
+        try { root = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path), documentOptions: docOpts)!.AsObject() : new JsonObject(); }
+        catch { AtomicFile.MoveAside(path); root = new JsonObject(); }
+        if (root["builds"] is not JsonObject builds) root["builds"] = builds = new JsonObject();
         var camel = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
         builds[build] = JsonNode.Parse(JsonSerializer.Serialize(layout, camel));
-        File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        AtomicFile.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 }
-
 
 

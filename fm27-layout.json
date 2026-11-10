@@ -7,6 +7,18 @@
   "builds": {
     "27.0.0+2493426": {
       "module": "game_plugin.dll",
+      "origin": "built-in",
+      // Relationship-list codes (person.relations): kind 8 nation / 1 club; nation+9 = nationality; club+3/4 = favoured
+      "relationCodes": { "nationKind": 8, "clubKind": 1, "nationality": 9, "favouredClub": [3, 4] },
+      // Real players with stable facts, used by Patch Doctor after an FM update (PA/height don't change in a save)
+      "anchors": [
+        { "fullName": "Erling Braut Haaland", "pa": 195, "heightCm": 195 },
+        { "fullName": "Lamine Yamal Nasraoui Ebana", "pa": 195, "heightCm": 178 },
+        { "fullName": "Jude Victor William Bellingham", "pa": 188, "heightCm": 186 },
+        { "fullName": "Bukayo Ayoyinka Saka", "pa": 188, "heightCm": 178 },
+        { "fullName": "Jonas Kurt Urbig", "pa": 170, "heightCm": 189 }
+      ],
+      "womensNamePattern": "\\b(women|women's|womens|ladies|feminin|feminino|femenino|femenina|femení|féminin|féminine|frauen|dames|damallsvenskan|toppserien|kvinde|naisten|wsl|nwsl|liga f)\\b|\\bfem\\b|\\(w\\)",
       "steamBuildId": 26340721,
 
       "personDb": {
@@ -102,6 +114,7 @@
     }
   }
 }
+
 
 
 

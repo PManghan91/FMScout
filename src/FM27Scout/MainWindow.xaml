@@ -57,6 +57,16 @@
                             </StackPanel>
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
                                 <StackPanel x:Name="Sidebar">
+                                    <Expander Header="Quick filters" IsExpanded="True">
+                                        <WrapPanel>
+                                            <CheckBox x:Name="FShortlist" Content="★ Shortlist only" Width="128"/>
+                                            <CheckBox x:Name="FGettable" Content="Gettable for us" Width="128" ToolTip="Join ≥ 50 (Possible or Likely) for your club"/>
+                                            <CheckBox x:Name="FNewgens" Content="Newgens only" Width="128"/>
+                                            <CheckBox x:Name="FBargains" Content="Bargains only" Width="128"/>
+                                            <CheckBox x:Name="FHideWp" Content="Hide WP unlikely" Width="128"/>
+                                            <CheckBox x:Name="FHideCantSign" Content="Hide can't sign" Width="128" ToolTip="e.g. foreign under-18s for a UK club"/>
+                                        </WrapPanel>
+                                    </Expander>
                                     <Expander Header="Basics" IsExpanded="True">
                                         <StackPanel>
                                             <Label Content="Name"/><TextBox x:Name="FName"/>
@@ -101,9 +111,7 @@
                                             <Label Content="Max wage per week (e.g. 80k)"/><TextBox x:Name="FWageMax"/>
                                             <Label Content="Contract expires by (year)"/><TextBox x:Name="FContract"/>
                                             <CheckBox x:Name="FFree" Content="Free agents only" Margin="0,8,0,0"/>
-                                            <CheckBox x:Name="FShortlist" Content="Shortlist only" Margin="0,4,0,0"/>
-                                            <CheckBox x:Name="FGettable" Content="Gettable for us (Join ≥ 50)" Margin="0,4,0,0"
-                                                      ToolTip="Only players the Join estimate rates Possible or Likely for your club."/>
+
                                         </StackPanel>
                                     </Expander>
 
@@ -135,6 +143,40 @@
                 </Grid>
             </TabItem>
 
+            <TabItem x:Name="ShortlistTab" Header="★ Shortlist">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="   All shortlisted players, whatever the Players filters. Right-click: compare / remove · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="ShortlistGrid" MouseDoubleClick="ShortlistGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
+                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="170"/>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
+                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
+                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="160"/>
+                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Join %" Binding="{Binding Join, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Would join?" Binding="{Binding JoinLabel}" Width="100"/>
+                            <DataGridTextColumn Header="WP" Binding="{Binding WpText}" Width="140"/>
+                            <DataGridTextColumn Header="Rule" Binding="{Binding TransferRule}" Width="200"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
+                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="160"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Squad">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
@@ -158,6 +200,8 @@
                             <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
                             <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
                             <DataGridTextColumn Header="Status" Binding="{Binding SquadStatusName}" Width="130"/>
+                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
+                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="150"/>
                             <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
                             <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
                             <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
@@ -247,6 +291,8 @@
         </TabControl>
     </DockPanel>
 </Window>
+
+
 
 
 
