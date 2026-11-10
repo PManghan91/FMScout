@@ -1147,6 +1147,29 @@ public partial class MainWindow : Window
     void SlFilter_Changed(object sender, TextChangedEventArgs e) => UpdateShortlistTab();
     void SlFilter_Changed2(object sender, SelectionChangedEventArgs e) { if (SlPos.ItemsSource != null) UpdateShortlistTab(); }
     void SlFilter_Click(object sender, RoutedEventArgs e) => UpdateShortlistTab();
+    async void SlReplaceFm_Click(object sender, RoutedEventArgs e)
+    {
+        SlReplaceFm.IsEnabled = false;
+        try
+        {
+            var lists = await Task.Run(GameLoader.ReadFmShortlists);
+            var my = (MyClubCombo.SelectedItem as MyClub)?.Name;
+            var uids = my != null && lists.TryGetValue(my, out var mine) ? mine : lists.Values.SelectMany(x => x).Distinct().ToList();
+            int removed = Shortlist.All.Count(u => !uids.Contains(u)), added = uids.Count(u => !Shortlist.Contains(u));
+            if (removed == 0 && added == 0) { StatusText.Text = $"The Scout shortlist already matches your in-game shortlist ({uids.Count} players)."; return; }
+            if (MessageBox.Show(this, $"Replace the Scout shortlist with your in-game shortlist{(my != null ? $" ({my})" : "")}?\n\n{removed} player(s) will be removed and {added} added, leaving {uids.Count}.\nThe current list is backed up first.",
+                "FM27 Scout", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+            int before = Shortlist.Count;
+            try { File.Copy(Path.Combine(AppPaths.Data, "shortlist.json"), Path.Combine(AppPaths.Data, $"shortlist-before-replace-{DateTime.Now:yyyyMMdd-HHmmss}.json")); } catch { }
+            Shortlist.ReplaceWith(uids);
+            _fmShort = lists; ApplyFmShortlist();
+            UpdateShortlistTab();
+            StatusText.Text = $"Shortlist replaced with your in-game shortlist: {uids.Count} players (was {before}). The old list is backed up in {AppPaths.Data}.";
+        }
+        catch (Exception ex) { ErrorDialog.Show(this, "FM27 Scout", "Couldn't read your in-game shortlist. Is FM27 running with your save loaded?\n\n" + ex.Message, ex.ToString()); }
+        finally { SlReplaceFm.IsEnabled = true; }
+    }
+
     async void SlImportFm_Click(object sender, RoutedEventArgs e)
     {
         SlImportFm.IsEnabled = false;

@@ -363,6 +363,14 @@ public static class Shortlist
     public static bool Contains(uint uid) => Ids.Contains(uid);
     public static void Toggle(uint uid) { if (!Ids.Remove(uid)) Ids.Add(uid); FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(Ids)); }
     public static int Count => Ids.Count;
+    public static IReadOnlyCollection<uint> All => Ids;
+    /// <summary>Replaces the whole shortlist with the given players.</summary>
+    public static void ReplaceWith(IEnumerable<uint> uids)
+    {
+        Ids.Clear(); foreach (var u in uids) Ids.Add(u);
+        FMScout.Reader.AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(Ids));
+    }
+
     /// <summary>Adds the given players; returns how many were new.</summary>
     public static int AddRange(IEnumerable<uint> uids)
     {
