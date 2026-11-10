@@ -201,6 +201,7 @@ public static class FilterBuilder
             case "cansign" or "signable": return p => p.CanSign;
             case "precontract": return p => p.PreContract;
             case "trn" or "arranged" or "transferarranged": return p => p.HasArranged;
+            case "infm" or "fmshortlist": return p => p.InFm;
             case "risky": return p => p.RiskCount > 0;
             case "nfs": return p => p.NotForSale;
             case "improving": return p => p.DeltaCaSeason > 0;

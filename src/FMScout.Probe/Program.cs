@@ -22,6 +22,7 @@ if (args.Length > 0 && args[0] == "patchtest")
     bad.PersonDb.RootRva = new Hex(good.PersonDb.RootRva + 0x1000); bad.GameDateRva = new Hex(good.GameDateRva + 0x1000);
     bad.PlayerVtableRva = new Hex(good.PlayerVtableRva + 0x40); bad.StaffVtableRva = new Hex(good.StaffVtableRva + 0x40); bad.HumanManagerVtableRva = new Hex(good.HumanManagerVtableRva + 0x40);
     foreach (var pc in bad.ExtraPlayerClasses) pc.VtableRva = new Hex(pc.VtableRva + 0x40);
+    bad.Shortlist.Lists = new Hex(good.Shortlist.Lists + 0x18); bad.Shortlist.ListPlayers = new Hex(good.Shortlist.ListPlayers + 0x8);
     foreach (var pr in typeof(PlayerLayout).GetProperties().Where(x => x.PropertyType == typeof(Hex) && x.Name is not ("CareerGoals" or "CareerApps")))
     { var h = (Hex)pr.GetValue(bad.Player)!; if (h.Value != 0) pr.SetValue(bad.Player, new Hex(h.Value + 0x10)); }
     using var m3 = ProcessMemory.Attach("fm");
@@ -36,6 +37,7 @@ if (args.Length > 0 && args[0] == "patchtest")
         Cmp("humanVtable", r.Layout.HumanManagerVtableRva, good.HumanManagerVtableRva); Cmp("gameDate", r.Layout.GameDateRva, good.GameDateRva);
         Cmp("player.positions", r.Layout.Player.Positions, good.Player.Positions); Cmp("player.CA", r.Layout.Player.CurrentAbility, good.Player.CurrentAbility);
         Cmp("player.careerStats", r.Layout.Player.CareerStats, good.Player.CareerStats);
+        Cmp("shortlist.teamData", r.Layout.Shortlist.TeamData, good.Shortlist.TeamData); Cmp("shortlist.lists", r.Layout.Shortlist.Lists, good.Shortlist.Lists); Cmp("shortlist.listPlayers", r.Layout.Shortlist.ListPlayers, good.Shortlist.ListPlayers);
     }
     return;
 }

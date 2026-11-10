@@ -1047,8 +1047,25 @@ public partial class MainWindow : Window
         return map.Count;
     }
 
+    Dictionary<string, List<uint>> _fmShort = new();
+    void ApplyFmShortlist()
+    {
+        var my = (MyClubCombo.SelectedItem as MyClub)?.Name;
+        var set = (my != null && _fmShort.TryGetValue(my, out var l) ? l : _fmShort.Values.SelectMany(x => x)).ToHashSet();
+        foreach (var r in _all) r.InFm = set.Contains(r.Uid);
+    }
+
+    void SlCopyMissing_Click(object sender, RoutedEventArgs e)
+    {
+        var missing = _all.Where(p => Shortlist.Contains(p.Uid) && !p.InFm).OrderByDescending(p => p.BestRoleScore).Select(p => p.Name).ToList();
+        if (missing.Count == 0) { StatusText.Text = _all.Count == 0 ? "Load from game first." : "Every shortlisted player is already on your in-game shortlist."; return; }
+        CopyNames(missing);
+        StatusText.Text = $"Copied {missing.Count} names not yet on your in-game shortlist. In FM: search each name and add to shortlist, then press Import (or Load) to refresh the In FM column.";
+    }
+
     string AfterLoad(LoadResult res)
     {
+        _fmShort = res.FmShortlists;
         Attr.Init(res.Layout.AttributeNames);
         Model.Positions.Names = res.Layout.PositionNames;
         BuildStaff(res.Staff);
@@ -1067,6 +1084,7 @@ public partial class MainWindow : Window
         string note;
         try { note = DevHistory.Apply(_all, $"{string.Join("+", res.HumanClubs)}-{GameLoader.NewgenUidFrom}", _today); }
         catch (Exception ex) { note = "development tracking unavailable (" + ex.Message + ")"; }
+        ApplyFmShortlist();
         BuildSquad();
         UpdateShortlistTab();
         return note;
@@ -1081,6 +1099,7 @@ public partial class MainWindow : Window
         var all = _all; var today = _today; var roles = _roles; var join = _join;
         await Task.Run(() => ClubContext.Evaluate(all, my, today, roles, join)); // off the UI thread
         StatusText.Text = $"Now evaluating for {my.Name} ({my.Nation}).";
+        ApplyFmShortlist();
         BuildSquad();
         UpdateShortlistTab();
         ApplyFilters();
@@ -1137,6 +1156,7 @@ public partial class MainWindow : Window
             var my = (MyClubCombo.SelectedItem as MyClub)?.Name;
             var uids = my != null && lists.TryGetValue(my, out var mine) ? mine : lists.Values.SelectMany(x => x).Distinct().ToList();
             int added = Shortlist.AddRange(uids);
+            _fmShort = lists; ApplyFmShortlist();
             UpdateShortlistTab();
             var known = _all.Count == 0 ? uids.Count : uids.Count(u => _all.Any(p => p.Uid == u));
             StatusText.Text = uids.Count == 0 ? "Your in-game shortlist is empty (or no save is loaded)."

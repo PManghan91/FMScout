@@ -18,6 +18,8 @@ public sealed class LoadResult
     public string LayoutSource { get; init; } = "";
     public List<string> LayoutWarnings { get; init; } = [];
     public List<string> HumanClubs { get; init; } = [];
+    /// <summary>In-game shortlist(s) of the human manager(s): club → player UIDs.</summary>
+    public Dictionary<string, List<uint>> FmShortlists { get; init; } = new();
     public List<StaffRow> Staff { get; init; } = [];
     public BuildLayout Layout { get; init; } = null!;
 }
@@ -177,6 +179,7 @@ public static class GameLoader
         progress?.Report("Reading the player list…");
         var persons = game.PersonPointers();
         var humans = game.HumanClubs().Select(c => c.Name).ToList();
+        Dictionary<string, List<uint>> fmShort; try { fmShort = game.HumanShortlists(); } catch { fmShort = new(); }
         var ptrs = persons.Where(game.IsPlayer).ToArray();
         long failsBefore = game.Memory.FailedReads;
 
@@ -231,7 +234,7 @@ public static class GameLoader
         {
             Players = rows, Build = game.BuildKey, GameDate = game.GameDate, PeopleInDb = persons.Length, ExcludedWomen = women,
             DecodeFailures = failed, Millis = sw.ElapsedMilliseconds, LayoutSource = src, LayoutWarnings = warnings,
-            HumanClubs = humans, Staff = staffBag.OrderBy(s => s.Name).ToList(), Layout = L,
+            HumanClubs = humans, FmShortlists = fmShort, Staff = staffBag.OrderBy(s => s.Name).ToList(), Layout = L,
         };
     }
 }

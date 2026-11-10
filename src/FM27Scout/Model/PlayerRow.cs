@@ -73,6 +73,9 @@ public sealed class PlayerRow
     public bool CanSign { get; set; } = true;
     /// <summary>A pre-contract (free transfer agreed in advance) is possible because his contract ends within 6 months.</summary>
     public bool PreContract { get; set; }
+    /// <summary>On the in-game FM shortlist (as of the last load / import).</summary>
+    public bool InFm { get; set; }
+    public string InFmText => InFm ? "✓" : "";
     /// <summary>Agreed future move (FM "Transfer arranged"), filled in shortly after loading.</summary>
     public FMScout.Reader.ArrangedTransfer? Arranged { get; set; }
     public bool HasArranged => Arranged != null;

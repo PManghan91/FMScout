@@ -171,6 +171,8 @@ public static class PatchDoctor
             $"staff: {Count(L.StaffVtableRva):N0}; human managers: {Count(L.HumanManagerVtableRva)}");
         if (Count(L.StaffVtableRva) == 0) Log("WARNING: staff class not found at the shifted RVA (Staff tab will be empty).");
         if (Count(L.HumanManagerVtableRva) == 0) Log("WARNING: human manager class not found (pick your club manually).");
+        // 4b) in-game shortlist (contract -> team -> data -> lists -> players); only checkable if the human has players shortlisted
+        CheckShortlist(m, gp.Base, L, vecBegin, vecEnd, playerVt, Log);
         // 5) sanity-check struct offsets we keep from the template against the anchors
         foreach (var f in found)
         {
@@ -191,6 +193,63 @@ public static class PatchDoctor
         res.Layout = L; res.Ok = true;
         Log("Done. New layout validated against " + string.Join(", ", found.Select(f => f.a.FullName)) + ".");
         return res;
+    }
+
+    static void CheckShortlist(ProcessMemory m, ulong modBase, BuildLayout L, ulong vecBegin, ulong vecEnd, ulong playerVt, Action<string> Log)
+    {
+        var playerVts = new HashSet<ulong> { playerVt };
+        foreach (var pc in L.ExtraPlayerClasses) playerVts.Add(modBase + (ulong)pc.VtableRva.Value);
+        bool IsPlayer(ulong q) => ProcessMemory.IsObjPtr(q) && playerVts.Contains(m.ReadPtr(q));
+        ulong hvt = modBase + (ulong)L.HumanManagerVtableRva.Value;
+        var teams = new List<ulong>();
+        for (ulong a = vecBegin; a < vecEnd; a += 8)
+        {
+            ulong v = m.ReadPtr(a); if (!ProcessMemory.IsObjPtr(v) || m.ReadPtr(v) != hvt) continue;
+            ulong con = m.ReadPtr(v + (ulong)L.Person.Contract.Value); if (!ProcessMemory.IsObjPtr(con)) continue;
+            ulong team = m.ReadPtr(con + (ulong)L.Contract.Team.Value); if (ProcessMemory.IsObjPtr(team)) teams.Add(team);
+        }
+        (ulong b, ulong e)? Vec(ulong at, int maxN)
+        {
+            ulong b = m.ReadPtr(at), e = m.ReadPtr(at + 8);
+            return ProcessMemory.IsObjPtr(b) && e > b && (e - b) % 8 == 0 && e - b <= (ulong)maxN * 8 ? (b, e) : null;
+        }
+        int Players(ulong team, long td, long li, long lp)
+        {
+            ulong data = m.ReadPtr(team + (ulong)td); if (!ProcessMemory.IsObjPtr(data)) return 0;
+            if (Vec(data + (ulong)li, 64) is not var (lb, le)) return 0;
+            int best = 0;
+            for (ulong a = lb; a < le; a += 8)
+            {
+                ulong list = m.ReadPtr(a); if (!ProcessMemory.IsObjPtr(list)) return 0;
+                if (Vec(list + (ulong)lp, 5000) is not var (b, e)) continue;
+                int n = 0; bool ok = true;
+                for (ulong x = b; x < e && ok; x += 8) { ulong en = m.ReadPtr(x); ok = ProcessMemory.IsObjPtr(en) && IsPlayer(m.ReadPtr(en)); n++; }
+                if (ok) best = Math.Max(best, n);
+            }
+            return best;
+        }
+        var S = L.Shortlist;
+        int now = teams.Sum(t => Players(t, S.TeamData, S.Lists, S.ListPlayers));
+        if (now > 0) { Log($"In-game shortlist offsets still valid ({now} players)."); return; }
+        // search nearest to the old offsets first (several routes can reach the same entries)
+        static IEnumerable<long> Near(long old, long max) => Enumerable.Range(0, (int)(max / 8) + 1).Select(i => (long)i * 8).OrderBy(x => Math.Abs(x - old));
+        foreach (var t in teams)
+            foreach (var td in Near(S.TeamData, 0x200))
+            {
+                ulong data = m.ReadPtr(t + (ulong)td); if (!ProcessMemory.IsObjPtr(data)) continue;
+                foreach (var li in Near(S.Lists, 0x800))
+                {
+                    if (Vec(data + (ulong)li, 64) is null) continue;
+                    foreach (var lp in Near(S.ListPlayers, 0x200))
+                        if (Players(t, td, li, lp) is int n && n > 0)
+                        {
+                            S.TeamData = new Hex(td); S.Lists = new Hex(li); S.ListPlayers = new Hex(lp);
+                            Log($"In-game shortlist found ({n} players): team +0x{td:X} -> +0x{li:X} -> list +0x{lp:X}.");
+                            return;
+                        }
+                }
+            }
+        Log("Note: in-game shortlist not checked (it is empty, or its layout moved). Add a player to your FM shortlist and run Patch Doctor again if Import from FM shortlist stops working.");
     }
 
     static void ShiftPlayer(PlayerLayout p, long s)
