@@ -38,6 +38,8 @@ public sealed record Player(
     string[] FavouredClubs,
     string? LeagueNation);
 
+public sealed class NoSaveLoadedException() : Exception("FM is running but its people database is empty - no save loaded yet?");
+
 public sealed record ClubInfo(ulong Address, string Name, int Reputation);
 
 public sealed record StaffInfo(ulong Address, uint Uid, string Name, string? FullName, DateOnly? DateOfBirth, string? Nationality,
@@ -86,20 +88,32 @@ public sealed class FmGame : IDisposable
 
     public DateOnly? GameDate => ReadDate(ModuleBase + (ulong)Layout.GameDateRva.Value);
 
-    /// <summary>All person pointers (players, staff, retired, ...) from the database's master vector.</summary>
+    ulong[]? _persons;
+
+    /// <summary>
+    /// All person pointers (players, staff, retired, ...) from the database's master vector. Several static paths lead to it;
+    /// the largest populated one wins. Empty everywhere = no save loaded yet.
+    /// </summary>
     public ulong[] PersonPointers()
     {
-        var db = Memory.ReadPtr(ModuleBase + (ulong)Layout.PersonDb.RootRva.Value);
-        ulong begin = Memory.ReadPtr(db + (ulong)Layout.PersonDb.VectorBegin.Value);
-        ulong end = Memory.ReadPtr(db + (ulong)Layout.PersonDb.VectorEnd.Value);
-        long count = (long)(end - begin) / 8;
-        if (count <= 0 || count > 5_000_000) throw new InvalidOperationException($"Person vector looks wrong ({count})");
-        var bytes = Memory.ReadBytes(begin, (int)(count * 8)) ?? throw new InvalidOperationException("Cannot read person vector");
-        var res = new ulong[count];
+        if (_persons != null) return _persons;
+        var paths = new[] { Layout.PersonDb }.Concat(Layout.PersonDb.Alternatives);
+        ulong bestBegin = 0; long bestCount = 0;
+        foreach (var path in paths)
+        {
+            var db = Memory.ReadPtr(ModuleBase + (ulong)path.RootRva.Value);
+            if (db < 0x10000) continue;
+            ulong begin = Memory.ReadPtr(db + (ulong)path.VectorBegin.Value);
+            ulong end = Memory.ReadPtr(db + (ulong)path.VectorEnd.Value);
+            long count = end > begin ? (long)(end - begin) / 8 : 0;
+            if (count > bestCount && count < 5_000_000) { bestCount = count; bestBegin = begin; }
+        }
+        if (bestCount < 1000) throw new NoSaveLoadedException();
+        var bytes = Memory.ReadBytes(bestBegin, (int)(bestCount * 8)) ?? throw new NoSaveLoadedException();
+        var res = new ulong[bestCount];
         Buffer.BlockCopy(bytes, 0, res, 0, bytes.Length);
-        return res;
+        return _persons = res;
     }
-
     public bool IsPlayer(ulong person) => _playerShift.ContainsKey(Memory.ReadPtr(person));
 
     public bool IsStaff(ulong person) => Layout.StaffVtableRva.Value != 0 && Memory.ReadPtr(person) == ModuleBase + (ulong)Layout.StaffVtableRva.Value;
@@ -264,6 +278,7 @@ public sealed class FmGame : IDisposable
 
     public void Dispose() => Memory.Dispose();
 }
+
 
 
 

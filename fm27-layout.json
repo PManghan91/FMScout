@@ -12,7 +12,13 @@
       "personDb": {
         "rootRva": "0x57056E0",   // static pointer -> database object
         "vectorBegin": "0x138",   // std::vector<Person*> of ALL people (players, staff, retired...)
-        "vectorEnd": "0x140"
+        "vectorEnd": "0x140",
+        // other static paths to the same master list. FM fills them at different times (0x57056E0 was empty after a restart
+        // on 10/11/2026 while 0x56F7070 had all 427k people), so the reader uses whichever is populated.
+        "alternatives": [
+          { "rootRva": "0x56F7070", "vectorBegin": "0x6E0", "vectorEnd": "0x6E8" },
+          { "rootRva": "0x56F7078", "vectorBegin": "0x4C0", "vectorEnd": "0x4C8" }
+        ]
       },
       "gameDateRva": "0x5706018", // confirmed: current in-game date (Wed 4/2/2037 = day 35); u16 day in low 9 bits, u16 year
       "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player (~140k)
@@ -96,6 +102,7 @@
     }
   }
 }
+
 
 
 

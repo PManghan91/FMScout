@@ -101,6 +101,15 @@ public static class GameLoader
 
     public static LoadResult Load(RoleSet roles, IProgress<string>? progress = null)
     {
+        try { return LoadCore(roles, progress); }
+        catch (NoSaveLoadedException)
+        {
+            throw new UserFacingException("FM27 is running, but no save is loaded yet (or it's still loading).\n\nLoad your save in FM27, wait until you're in the game, then press Load from game.");
+        }
+    }
+
+    static LoadResult LoadCore(RoleSet roles, IProgress<string>? progress)
+    {
         var sw = Stopwatch.StartNew();
         var (layouts, src) = LoadLayouts();
         FmGame game;
@@ -176,6 +185,7 @@ public static class GameLoader
         }
     }
 }
+
 
 
 

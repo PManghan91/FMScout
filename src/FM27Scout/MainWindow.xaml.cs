@@ -527,8 +527,10 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = "Load failed: " + ex.Message;
-            MessageBox.Show(this, ex.ToString(), "FM27 Scout – load failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            StatusText.Text = "Load failed. See the message for details.";
+            ErrorDialog.Show(this, "FM27 Scout – couldn't load",
+                "Something went wrong reading the game. Make sure FM27 is running with your save loaded (not on a menu or loading screen) and try Load from game again.\n\n" +
+                "If it keeps happening, open Details below and send it to me.", ex.ToString());
         }
         finally { LoadButton.IsEnabled = true; }
     }
@@ -1234,6 +1236,7 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
 
 
 

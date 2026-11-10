@@ -31,7 +31,13 @@ public sealed class BuildLayout
 
 public sealed class PlayerClass { public Hex VtableRva { get; set; } public Hex Shift { get; set; } }
 
-public sealed class PersonDbLayout { public Hex RootRva { get; set; } public Hex VectorBegin { get; set; } public Hex VectorEnd { get; set; } }
+public sealed class PersonDbLayout
+{
+    public Hex RootRva { get; set; }
+    public Hex VectorBegin { get; set; }
+    public Hex VectorEnd { get; set; }
+    public PersonDbLayout[] Alternatives { get; set; } = [];
+}
 
 public sealed class PersonLayout
 {
@@ -111,6 +117,7 @@ public static class LayoutFile
         return JsonSerializer.Deserialize<Root>(json, opts)!.Builds;
     }
 }
+
 
 
 
