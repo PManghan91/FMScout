@@ -90,6 +90,159 @@ if (args.Length > 0 && args[0] == "statsfind")
     }
     return;
 }
+if (args.Length > 0 && args[0] == "findmultiset")
+{
+    using var m4 = ProcessMemory.Attach("fm");
+    foreach (var spec in args.Skip(1))
+    {
+        var want = spec.Split(",").Select(int.Parse).OrderBy(x => x).ToArray();
+        int n = want.Length; int shown = 0;
+        Console.WriteLine($"multiset [{spec}]");
+        foreach (var r in m4.Regions(privateOnly: true))
+        {
+            if (r.Size > 512UL << 20) continue;
+            var buf = m4.ReadBytes(r.Base, (int)r.Size); if (buf == null) continue;
+            foreach (int stride in new[] { 1, 2, 4, 8 })
+            {
+                var w = new int[n];
+                for (int o = 0; o + stride * n <= buf.Length; o += stride)
+                {
+                    int v0 = buf[o]; if (Array.IndexOf(want, v0) < 0) continue;
+                    bool ok = true;
+                    for (int i = 0; i < n && ok; i++)
+                    {
+                        int pos = o + i * stride; int v = buf[pos];
+                        for (int k = 1; k < stride; k++) if (buf[pos + k] != 0) { ok = false; break; }
+                        w[i] = v;
+                    }
+                    if (!ok) continue;
+                    var s = (int[])w.Clone(); Array.Sort(s);
+                    if (!s.SequenceEqual(want)) continue;
+                    if (shown++ < 15) Console.WriteLine($"  {r.Base + (ulong)o:X} stride {stride}: {string.Join(",", w)}");
+                }
+            }
+        }
+        Console.WriteLine($"  total {shown}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "dumpptr")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var byPtr = new Dictionary<ulong, string>();
+    foreach (var pp in g.PlayerPointers()) { var pl = g.ReadPlayer(pp); if (pl.Club == "Bristol Rovers") byPtr[pp] = pl.Name.Split(" ").Last(); }
+    ulong a = Convert.ToUInt64(args[1], 16); int before = int.Parse(args[2]), len = int.Parse(args[3]);
+    var b = m2.ReadBytes(a - (ulong)before, before + len)!;
+    for (int o = 0; o + 8 <= b.Length; o += 8)
+    {
+        ulong v = BitConverter.ToUInt64(b, o);
+        string d = byPtr.TryGetValue(v, out var n) ? $"PLAYER {n}" : g.InModule(v) ? $"vt {v - g.ModuleBase:X}" : ProcessMemory.IsObjPtr(v) && g.InModule(m2.ReadPtr(v)) ? $"->obj vt {m2.ReadPtr(v) - g.ModuleBase:X}" : "";
+        Console.WriteLine($"{(long)o - before,6:X}: {v:X16}  {d}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "slotclass")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var xiNames = args[1].Split(","); var benchNames = args[2].Split(",");
+    var xi = new Dictionary<ulong, string>(); var bench = new Dictionary<ulong, string>();
+    foreach (var pp in g.PlayerPointers()) { var pl = g.ReadPlayer(pp); if (pl.Club != "Bristol Rovers") continue; if (xiNames.Any(n => pl.Name.EndsWith(n))) xi[pp] = pl.Name; else if (benchNames.Any(n => pl.Name.EndsWith(n))) bench[pp] = pl.Name; }
+    Console.WriteLine($"xi {xi.Count} bench {bench.Count}");
+    var all = xi.Keys.Concat(bench.Keys).ToHashSet();
+    var refs = m2.ScanPointersToAny(all, privateOnly: true, max: 500000);
+    var keyXi = new Dictionary<string, HashSet<ulong>>(); var keyBench = new Dictionary<string, HashSet<ulong>>(); var keyEx = new Dictionary<string, ulong>();
+    foreach (var (at, val) in refs)
+    {
+        for (int k = 0; k <= 0x400; k += 8)
+        {
+            ulong q = m2.ReadPtr(at - (ulong)k);
+            if (!g.InModule(q)) continue;
+            string key = $"vt {q - g.ModuleBase:X} +{k:X}";
+            var d = xi.ContainsKey(val) ? keyXi : keyBench;
+            if (!d.TryGetValue(key, out var s)) d[key] = s = new();
+            s.Add(val); keyEx.TryAdd(key, at - (ulong)k);
+            break;
+        }
+    }
+    foreach (var (key, s) in keyXi.OrderByDescending(kv => kv.Value.Count))
+    {
+        int b = keyBench.TryGetValue(key, out var bs) ? bs.Count : 0;
+        if (s.Count >= 8) Console.WriteLine($"{key}: xi {s.Count}/11, bench {b}/{bench.Count}  e.g. obj {keyEx[key]:X}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "dumpu32")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var byUid = new Dictionary<uint, string>();
+    foreach (var pp in g.PlayerPointers()) { var pl = g.ReadPlayer(pp); if (pl.Club == "Bristol Rovers") byUid[pl.Uid] = pl.Name.Split(" ").Last(); }
+    ulong a = Convert.ToUInt64(args[1], 16); int before = int.Parse(args[2]), len = int.Parse(args[3]);
+    var b = m2.ReadBytes(a - (ulong)before, before + len)!;
+    for (int o = 0; o < b.Length; o += 16)
+    {
+        var sb = new System.Text.StringBuilder($"{(long)o - before,6:X}: ");
+        for (int k = 0; k < 16; k += 4) { uint v = BitConverter.ToUInt32(b, o + k); sb.Append(byUid.TryGetValue(v, out var n) ? $"[{n,-10}] " : $"{v:X8}     "); }
+        Console.WriteLine(sb);
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "finduids")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var names = args.Skip(1).ToArray();
+    var t = new Dictionary<uint, string>();
+    foreach (var pp in g.PlayerPointers()) { var pl = g.ReadPlayer(pp); if (pl.Club == "Bristol Rovers" && names.Any(n => pl.Name.EndsWith(n))) t[pl.Uid] = pl.Name.Split(" ").Last(); }
+    Console.WriteLine($"targets {t.Count}: {string.Join(", ", t.Select(k => k.Value + "=" + k.Key))}");
+    int shown = 0;
+    foreach (var r in m2.Regions(privateOnly: true))
+    {
+        if (r.Size > 512UL << 20) continue;
+        var buf = m2.ReadBytes(r.Base, (int)r.Size); if (buf == null) continue;
+        var hits = new List<int>();
+        for (int o = 0; o + 4 <= buf.Length; o += 4) if (t.ContainsKey(BitConverter.ToUInt32(buf, o))) hits.Add(o);
+        for (int i = 0; i < hits.Count; i++)
+        {
+            int j = i; var set = new HashSet<uint>();
+            while (j < hits.Count && hits[j] - hits[i] <= 0x400) { set.Add(BitConverter.ToUInt32(buf, hits[j])); j++; }
+            if (set.Count >= 10 && shown++ < 25)
+            {
+                Console.WriteLine($"cluster {r.Base + (ulong)hits[i]:X}: {set.Count} distinct: " + string.Join(", ", Enumerable.Range(i, j - i).Select(k => $"+{hits[k] - hits[i]:X}={t[BitConverter.ToUInt32(buf, hits[k])]}")));
+                i = j - 1;
+            }
+        }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "findset")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var names = args.Skip(1).ToArray();
+    var players = g.PlayerPointers().ToList();
+    var t = new Dictionary<ulong, string>();
+    foreach (var pp in players) { var pl = g.ReadPlayer(pp); if (pl.Club == "Bristol Rovers" && names.Any(n => pl.Name.EndsWith(n))) t[pp] = pl.Name; }
+    Console.WriteLine($"targets {t.Count}: {string.Join(", ", t.Values)}");
+    var refs = m2.ScanPointersToAny(t.Keys.ToHashSet(), privateOnly: true, max: 500000);
+    Console.WriteLine($"{refs.Count} refs");
+    var sorted = refs.OrderBy(r => r.At).ToList();
+    for (int i = 0; i < sorted.Count; i++)
+    {
+        int j = i; var set = new HashSet<ulong>();
+        ulong win = args[0] == "findset" ? Convert.ToUInt64(Environment.GetEnvironmentVariable("WIN") ?? "600", 16) : 0x600;
+        int need = int.Parse(Environment.GetEnvironmentVariable("NEED") ?? "10");
+        while (j < sorted.Count && sorted[j].At - sorted[i].At <= win) { set.Add(sorted[j].Value); j++; }
+        if (set.Count >= need)
+        {
+            Console.WriteLine($"cluster at {sorted[i].At:X}..{sorted[j - 1].At:X}: {set.Count} distinct: " + string.Join(", ", sorted.Skip(i).Take(j - i).Select(r => $"+{r.At - sorted[i].At:X}={t[r.Value].Split(" ").Last()}")));
+            i = j - 1;
+        }
+    }
+    return;
+}
 if (args.Length > 0 && args[0] == "xidump")
 {
     using var g = FmGame.Attach(Report.FindLayout());
@@ -1123,6 +1276,13 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
+
+
+
+
+
 
 
 

@@ -8,6 +8,10 @@ public sealed class TacticSlot
 {
     public string Pos { get; set; } = "";
     public string Role { get; set; } = "";
+    /// <summary>Out-of-possession role (FM26/27 two-phase tactics); shown with the in-possession role.</summary>
+    public string? OopRole { get; set; }
+    /// <summary>Starter pinned by the user (or taken from FM); null = pick the best squad player for the role.</summary>
+    public uint? StarterUid { get; set; }
     public double X { get; set; }
     public double Y { get; set; }
 }
@@ -41,6 +45,7 @@ public static class Tactics
         ["3-5-2"] = [GK, ("DC", .2, .78), ("DC", .5, .82), ("DC", .8, .78), ("WBL", .1, .52), ("DM", .5, .62), ("MC", .3, .44), ("MC", .7, .44), ("WBR", .9, .52), ("ST", .3, .15), ("ST", .7, .15)],
         ["3-4-2-1"] = [GK, ("DC", .2, .78), ("DC", .5, .82), ("DC", .8, .78), ("WBL", .1, .55), ("DM", .35, .6), ("DM", .65, .6), ("WBR", .9, .55), ("AMC", .3, .33), ("AMC", .7, .33), ("ST", .5, .13)],
         ["5-3-2"] = [GK, ("WBL", .1, .62), ("DC", .25, .8), ("DC", .5, .84), ("DC", .75, .8), ("WBR", .9, .62), ("MC", .25, .46), ("DM", .5, .6), ("MC", .75, .46), ("ST", .3, .15), ("ST", .7, .15)],
+        ["3-2-2-3 (wing-backs)"] = [GK, ("DC", .2, .8), ("DC", .5, .84), ("DC", .8, .8), ("WBL", .1, .6), ("WBR", .9, .6), ("MC", .3, .5), ("MC", .7, .5), ("AML", .15, .24), ("AMC", .5, .28), ("AMR", .85, .24)],
         ["5-2-3"] = [GK, ("WBL", .1, .62), ("DC", .25, .8), ("DC", .5, .84), ("DC", .75, .8), ("WBR", .9, .62), ("MC", .3, .48), ("MC", .7, .48), ("AML", .15, .27), ("AMR", .85, .27), ("ST", .5, .13)],
     };
 
@@ -50,6 +55,16 @@ public static class Tactics
         "GK" => "GK", "DC" or "SW" => "CB", "DL" or "DR" => "FB", "WBL" or "WBR" => "WB", "DM" => "DM", "MC" => "CM",
         "ML" or "MR" => "WM", "AML" or "AMR" => "IF", "AMC" => "AM", "ST" => "CF", _ => "CM",
     };
+
+    /// <summary>Paul's FM tactic at Bristol Rovers (from his screenshot): IP role / OOP role per slot.</summary>
+    public static TacticDef BristolRovers()
+    {
+        var t = Build("3-2-2-3 (wing-backs)");
+        (string ip, string oop)[] roles = [("BPGK", "GK"), ("OCB", "CB"), ("BPCB", "CB"), ("OCB", "CB"), ("AWB", "FB"), ("AWB", "FB"), ("MEZ", "DM"), ("MEZ", "DM"), ("IF", "W"), ("SS", "AM"), ("IF", "W")];
+        for (int i = 0; i < 11; i++) { t.Slots[i].Role = roles[i].ip; t.Slots[i].OopRole = roles[i].oop; }
+        t.Source = "fm-screenshot";
+        return t;
+    }
 
     public static TacticDef Build(string formation, TacticDef? keepRolesFrom = null)
     {
@@ -92,8 +107,12 @@ public static class Tactics
             .OrderBy(i => squad.Count(p => p.RoleScores.Length > ri[i] && p.RoleScores[ri[i]] >= 55))
             .ThenByDescending(i => squad.Select(p => p.RoleScores.Length > ri[i] ? p.RoleScores[ri[i]] : 0).DefaultIfEmpty(0).Max());
         var used = new HashSet<PlayerRow>();
+        // pinned starters first
+        for (int i = 0; i < t.Slots.Count; i++)
+            if (t.Slots[i].StarterUid is uint u && squad.FirstOrDefault(p => p.Uid == u) is PlayerRow pin && used.Add(pin)) res[i] = pin;
         foreach (var i in order)
         {
+            if (res[i] != null) continue;
             var best = squad.Where(p => !used.Contains(p) && p.RoleScores.Length > ri[i]).OrderByDescending(p => p.RoleScores[ri[i]]).FirstOrDefault();
             if (best != null) { res[i] = best; used.Add(best); }
         }

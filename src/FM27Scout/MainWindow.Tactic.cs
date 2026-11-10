@@ -69,6 +69,15 @@ public partial class MainWindow
             if (_formationBox.SelectedItem is string f && f != _tactic.Formation) { _tactic = Tactics.Build(f, _tactic); Tactics.Save(_tactic); _slot = -1; RefreshTactic(); }
         };
         bar.Children.Add(_formationBox);
+        var mine = new Button { Content = "My FM tactic", Margin = new Thickness(8, 0, 0, 0), ToolTip = "Your Bristol Rovers tactic from FM: 3 CBs (OCB/BPCB/OCB), AWB wing-backs, two Channel Midfielders, IF / SS / IF" };
+        mine.Click += (_, _) =>
+        {
+            _tactic = Tactics.BristolRovers();
+            string[] xi = ["Scott Gutierrez", "Emmanuel Ayinde", "Charlie Dewar", "Ruaridh Dodds", "Mohammad Moradi", "Andre Singleton", "Fynn Hawkeswood", "Neale Fanning", "James Hardwick", "Noah White", "Jimmy-Jay Wadham"];
+            for (int i = 0; i < 11; i++) _tactic.Slots[i].StarterUid = _all.FirstOrDefault(p => p.Name == xi[i] && p.Club == "Bristol Rovers")?.Uid;
+            Tactics.Save(_tactic); _formationBox.SelectedItem = _tactic.Formation; RefreshTactic();
+        };
+        bar.Children.Add(mine);
         var reset = new Button { Content = "Default roles", Margin = new Thickness(8, 0, 0, 0), ToolTip = "Reset every slot to the standard role for its position" };
         reset.Click += (_, _) => { _tactic = Tactics.Build(_tactic.Formation); Tactics.Save(_tactic); RefreshTactic(); };
         bar.Children.Add(reset);
@@ -175,7 +184,22 @@ public partial class MainWindow
             if (row == null) { g.ContextMenu = null; return; }
             if (!row.IsSelected) { g.SelectedItems.Clear(); row.IsSelected = true; }
             var sel = g.SelectedItems.OfType<SlotCandidate>().Select(c => c.P).ToList();
-            g.ContextMenu = BuildRowMenu(((SlotCandidate)row.Item).P, sel);
+            var menu = BuildRowMenu(((SlotCandidate)row.Item).P, sel);
+            if (ReferenceEquals(g, _depthGrid) && _slot >= 0)
+            {
+                var pick = ((SlotCandidate)row.Item).P; var slot = _tactic.Slots[_slot];
+                var start = new MenuItem { Header = $"Start {pick.Name} at {slot.Pos}", FontWeight = FontWeights.SemiBold };
+                start.Click += (_, _) => { foreach (var s2 in _tactic.Slots) if (s2.StarterUid == pick.Uid) s2.StarterUid = null; slot.StarterUid = pick.Uid; Tactics.Save(_tactic); RefreshTactic(keepSlot: true); };
+                menu.Items.Insert(0, start);
+                if (slot.StarterUid != null)
+                {
+                    var auto = new MenuItem { Header = $"Unpin {slot.Pos} (let FM27 Scout pick)" };
+                    auto.Click += (_, _) => { slot.StarterUid = null; Tactics.Save(_tactic); RefreshTactic(keepSlot: true); };
+                    menu.Items.Insert(1, auto);
+                }
+                menu.Items.Insert(menu.Items.Count > 1 && slot.StarterUid != null ? 2 : 1, new Separator());
+            }
+            g.ContextMenu = menu;
         };
         return g;
     }
@@ -196,7 +220,7 @@ public partial class MainWindow
         _tacticSquad = (SquadGrid.ItemsSource as List<PlayerRow> ?? []).Where(p => p.TeamName == "First team" || SquadAllTeams.IsChecked == true).ToList();
         _xi = Tactics.PickXi(_tactic, _tacticSquad, _roles);
         _tacticNote.Text = _all.Count == 0 ? "Press Load from game first."
-            : $"Formation and roles are set here (click a slot to change its role). Starters are picked from your squad by score in each slot's role.";
+            : $"Click a slot to change its role; right-click a player in Squad depth › Start to pin your starter (pinned slots show 📌). Unpinned starters are FM27 Scout's best pick.";
         if (!keepSlot || _slot >= _tactic.Slots.Count) _slot = -1;
         DrawPitch();
         RefreshSlotLists();
@@ -230,9 +254,9 @@ public partial class MainWindow
             };
             var sp = new StackPanel();
             var top = new DockPanel();
-            var pos = new TextBlock { Text = s.Pos, FontSize = 11, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("Muted") };
+            var pos = new TextBlock { Text = (s.StarterUid != null ? "📌 " : "") + s.Pos, FontSize = 11, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("Muted") };
             DockPanel.SetDock(pos, Dock.Right); top.Children.Add(pos);
-            top.Children.Add(new TextBlock { Text = role.Code, FontSize = 11, Foreground = (Brush)FindResource("Muted"), TextTrimming = TextTrimming.CharacterEllipsis });
+            top.Children.Add(new TextBlock { Text = role.Code + (s.OopRole is { Length: > 0 } o ? " / " + o : ""), FontSize = 11, Foreground = (Brush)FindResource("Muted"), TextTrimming = TextTrimming.CharacterEllipsis });
             sp.Children.Add(top);
             var nm = new DockPanel();
             var v = new TextBlock { Text = starter == null ? "" : $"{sc:F0}", FontSize = 14, FontWeight = FontWeights.Bold, Foreground = ScoreBrush.For(sc), Margin = new Thickness(4, 0, 0, 0) };
@@ -332,7 +356,11 @@ public partial class MainWindow
     internal FrameworkElement? SelfTestTactic()
     {
         SquadModeTactic.IsChecked = true; ShowTacticMode(true);
-        _slot = 8; DrawPitch(); RefreshSlotLists();
+        _tactic = Tactics.BristolRovers();
+        string[] xi = ["Scott Gutierrez", "Emmanuel Ayinde", "Charlie Dewar", "Ruaridh Dodds", "Mohammad Moradi", "Andre Singleton", "Fynn Hawkeswood", "Neale Fanning", "James Hardwick", "Noah White", "Jimmy-Jay Wadham"];
+        for (int i = 0; i < 11; i++) _tactic.Slots[i].StarterUid = _all.FirstOrDefault(p => p.Name == xi[i])?.Uid;
+        RefreshTactic();
+        _slot = 9; DrawPitch(); RefreshSlotLists();
         return TacticHost;
     }
 }
