@@ -139,7 +139,7 @@ public partial class MainWindow : Window
             Role = role is { Code: not "-" } ? role.Code : null, RoleMin = D(FRoleMin), RolePotentialMin = D(FRolePotMin),
             Club = S(FClub), League = S(FLeague), ValueMax = S(FValueMax), WageMax = S(FWageMax), ContractExpiresBy = I(FContract),
             FreeAgentsOnly = FFree.IsChecked == true, GettableOnly = FGettable.IsChecked == true, ShortlistOnly = FShortlist.IsChecked == true,
-            NewgensOnly = FNewgens.IsChecked == true, BargainsOnly = FBargains.IsChecked == true, HideWpUnlikely = FHideWp.IsChecked == true, HideCantSign = FHideCantSign.IsChecked == true,
+            NewgensOnly = FNewgens.IsChecked == true, BargainsOnly = FBargains.IsChecked == true, HideWpUnlikely = FHideWp.IsChecked == true, HideCantSign = FHideCantSign.IsChecked == true, HideArranged = FHideTrn.IsChecked == true,
             AttributeMin = _attrBoxes.Where(kv => int.TryParse(kv.Value.Text, out var v) && v > 0).ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value.Text)),
             Query = QueryBox.Text.Trim(),
             UpgradeForUid = _upgrade?.UpgradeForUid, UpgradeForName = _upgrade?.UpgradeForName, UpgradeMinScore = _upgrade?.UpgradeMinScore ?? 0,
@@ -162,7 +162,7 @@ public partial class MainWindow : Window
         FRoleMin.Text = f.RoleMin?.ToString() ?? ""; FRolePotMin.Text = f.RolePotentialMin?.ToString() ?? "";
         FClub.Text = f.Club ?? ""; FLeague.Text = f.League ?? ""; FValueMax.Text = f.ValueMax ?? ""; FWageMax.Text = f.WageMax ?? "";
         FContract.Text = N(f.ContractExpiresBy); FFree.IsChecked = f.FreeAgentsOnly; FGettable.IsChecked = f.GettableOnly; FShortlist.IsChecked = f.ShortlistOnly;
-        FNewgens.IsChecked = f.NewgensOnly; FBargains.IsChecked = f.BargainsOnly; FHideWp.IsChecked = f.HideWpUnlikely; FHideCantSign.IsChecked = f.HideCantSign;
+        FNewgens.IsChecked = f.NewgensOnly; FBargains.IsChecked = f.BargainsOnly; FHideWp.IsChecked = f.HideWpUnlikely; FHideCantSign.IsChecked = f.HideCantSign; FHideTrn.IsChecked = f.HideArranged;
         foreach (var (k, tb) in _attrBoxes) tb.Text = f.AttributeMin.TryGetValue(k, out var v) ? v.ToString() : "";
         QueryBox.Text = f.Query;
     }
@@ -285,6 +285,8 @@ public partial class MainWindow : Window
         Text("gpg", "Goals/game", "Moneyball", nameof(PlayerRow.GoalsPerGame), p => p.GoalsPerGame, visible: false, fmt: "F2", style: scoreStyle).HeaderStyle = HeaderTip("Career goals per appearance");
         Text("wp", "WP", "Would join", nameof(PlayerRow.WpText), p => p.WpText, width: 140)
             .HeaderStyle = HeaderTip("Work permit for your club's country. Passports from FM's data; 'Needed' verdicts are our estimate of the GBE rules.");
+        Text("trn", "Transfer arranged", "Club & contract", nameof(PlayerRow.ArrangedText), p => p.ArrangedSort, width: 190)
+            .HeaderStyle = HeaderTip("Agreed move to another club (FM: Transfer arranged): destination and date. Filled in a few seconds after loading. Query: trn / -trn");
         Text("nats", "Nationalities", "Basics", nameof(PlayerRow.Nationalities), p => p.Nationalities, visible: false, width: 170);
         Text("status", "Squad status", "Club & contract", nameof(PlayerRow.SquadStatusName), p => p.SquadStatusName, visible: false, width: 120);
         Text("rep", "Rep", "Reputation", nameof(PlayerRow.CurrentRep), p => p.CurrentRep, visible: false, style: scoreStyle);
@@ -537,6 +539,7 @@ public partial class MainWindow : Window
                     if (_sortCol == null) { _sortCol = _cols.First(c => c.Key == "ca"); _sortDir = ListSortDirection.Descending; }
                     ApplyFilters();
                     BuildClubs();
+                    _ = LoadArrangedAsync(res.Players);
                     return;
                 }
                 catch (UnknownBuildException ub)
@@ -719,6 +722,15 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
+    internal FrameworkElement? SelfTestProfileCard(string name)
+    {
+        var p = _all.Where(x => x.Name.Contains(name, StringComparison.OrdinalIgnoreCase)).OrderByDescending(x => x.CA).FirstOrDefault();
+        if (p == null) return null;
+        var sp = new StackPanel { Margin = new Thickness(18, 14, 18, 18) };
+        ShowProfile(p, sp);
+        return new Border { Background = (Brush)FindResource("Panel"), Width = 560, Child = sp };
+    }
+
     internal void SelfTestSelect(int i) { if (_view.Count > i) { PlayerGrid.SelectedIndex = i; OpenProfile(_view[i]); } }
 
     // ------------------------------------------------------------------ staff
@@ -794,7 +806,29 @@ public partial class MainWindow : Window
         OpenProfile(p);
     }
 
-    void SquadGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (SquadGrid.SelectedItem is PlayerRow p) ShowInPlayers(p); }
+    void SquadGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (!IsHeader(e) && SquadGrid.SelectedItem is PlayerRow p) OpenProfileWindow(p); }
+    static bool IsHeader(MouseButtonEventArgs e) => e.OriginalSource is DependencyObject d && FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) != null;
+
+    Window? _profileWindow; StackPanel? _profileWindowPanel;
+    void OpenProfileWindow(PlayerRow p)
+    {
+        if (_profileWindow == null)
+        {
+            _profileWindowPanel = new StackPanel { Margin = new Thickness(18, 14, 18, 18) };
+            _profileWindow = new Window
+            {
+                Owner = this, Width = 560, Height = Math.Min(980, SystemParameters.WorkArea.Height - 40),
+                WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = (Brush)FindResource("Panel"),
+                Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _profileWindowPanel },
+            };
+            _profileWindow.KeyDown += (_, k) => { if (k.Key == Key.Escape) _profileWindow?.Close(); };
+            _profileWindow.Closed += (_, _) => { _profileWindow = null; _profileWindowPanel = null; };
+            _profileWindow.Show();
+        }
+        _profileWindow.Title = $"{p.Name} - profile";
+        ShowProfile(p, _profileWindowPanel);
+        _profileWindow.Activate();
+    }
     void PlayerGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject d && FindParent<System.Windows.Controls.Primitives.DataGridColumnHeader>(d) != null) return; // header double-click
@@ -907,7 +941,7 @@ public partial class MainWindow : Window
         var open = new MenuItem { Header = "Open comparison" };
         open.Click += (_, _) => { RenderCompare(); Tabs.SelectedIndex = 2; };
         var prof = new MenuItem { Header = "Open profile" };
-        prof.Click += (_, _) => ShowInPlayers(p);
+        prof.Click += (_, _) => { if (Tabs.SelectedIndex == 0) OpenProfile(p); else OpenProfileWindow(p); };
         menu.Items.Add(prof);
         menu.Items.Add(open);
         menu.Items.Add(new Separator());
@@ -1010,6 +1044,31 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ my club / join estimate
     string? _savedMyClub;
 
+    async Task LoadArrangedAsync(List<PlayerRow> rows)
+    {
+        var ct = _loadCts?.Token ?? default;
+        var baseStatus = StatusText.Text;
+        StatusText.Text = baseStatus + " · checking arranged transfers…";
+        try
+        {
+            var map = await Task.Run(() => GameLoader.LoadArranged(rows, ct));
+            if (!ReferenceEquals(rows, _all)) return; // a newer load replaced these rows
+            int n = 0;
+            foreach (var r in rows) { r.Arranged = map.GetValueOrDefault(r.Source.Address); if (r.Arranged != null) n++; }
+            StatusText.Text = baseStatus + $" · {n:N0} transfers arranged";
+            ApplyFilters(); UpdateShortlistTab();
+            if (ProfilePanel.Visibility == Visibility.Visible && PlayerGrid.SelectedItem is PlayerRow p) ShowProfile(p);
+        }
+        catch (Exception ex) { if (ReferenceEquals(rows, _all)) StatusText.Text = baseStatus + " · arranged transfers not read (" + ex.Message + ")"; }
+    }
+
+    internal int SelfTestArranged()
+    {
+        var map = GameLoader.LoadArranged(_all, default);
+        foreach (var r in _all) r.Arranged = map.GetValueOrDefault(r.Source.Address);
+        return map.Count;
+    }
+
     string AfterLoad(LoadResult res)
     {
         Attr.Init(res.Layout.AttributeNames);
@@ -1070,7 +1129,7 @@ public partial class MainWindow : Window
             var f = new FilterState
             {
                 Query = SlQuery.Text.Trim(), AgeMin = I(SlAgeMin), AgeMax = I(SlAgeMax), CaMin = I(SlCaMin), PaMin = I(SlPaMin),
-                GettableOnly = SlGettable.IsChecked == true, HideCantSign = SlCanSign.IsChecked == true,
+                GettableOnly = SlGettable.IsChecked == true, HideCantSign = SlCanSign.IsChecked == true, HideArranged = SlNoTrn.IsChecked == true,
                 Positions = pos is null or "(any)" ? [] : pos.Split('/').ToList(),
             };
             pred = FilterBuilder.Build(f, _roles);
@@ -1094,7 +1153,7 @@ public partial class MainWindow : Window
     void SlClear_Click(object sender, RoutedEventArgs e)
     {
         SlQuery.Text = SlAgeMin.Text = SlAgeMax.Text = SlCaMin.Text = SlPaMin.Text = "";
-        SlGettable.IsChecked = SlCanSign.IsChecked = false; SlPos.SelectedIndex = 0;
+        SlGettable.IsChecked = SlCanSign.IsChecked = false; SlNoTrn.IsChecked = true; SlPos.SelectedIndex = 0;
         UpdateShortlistTab();
     }
 
@@ -1110,7 +1169,7 @@ public partial class MainWindow : Window
         UpdateShortlistTab();
     }
 
-    void ShortlistGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (ShortlistGrid.SelectedItem is PlayerRow p) ShowInPlayers(p); }
+    void ShortlistGrid_DoubleClick(object sender, MouseButtonEventArgs e) { if (!IsHeader(e) && ShortlistGrid.SelectedItem is PlayerRow p) OpenProfileWindow(p); }
 
     // ------------------------------------------------------------------ profile
     void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1134,8 +1193,9 @@ public partial class MainWindow : Window
 
     void CloseProfile_Click(object sender, RoutedEventArgs e) => CloseProfile();
 
-    void ShowProfile(PlayerRow p)
+    void ShowProfile(PlayerRow p, StackPanel? target = null)
     {
+        var Profile = target ?? this.Profile;
         Profile.Children.Clear();
         var muted = (Brush)FindResource("Muted");
         TextBlock T(string s, double size = 13, bool bold = false, Brush? fg = null) =>
@@ -1148,6 +1208,7 @@ public partial class MainWindow : Window
         if (p.Source.OtherNationalities.Length > 0) Profile.Children.Add(T($"Passports: {p.Nationalities}", 11.5, fg: muted));
         if (p.Source.FavouredClubs.Length > 0) Profile.Children.Add(T($"Favoured clubs: {string.Join(", ", p.Source.FavouredClubs)}", 11.5, fg: muted));
         if (p.WpText.Length > 0) Profile.Children.Add(T($"Work permit: {p.WpText}. {p.WpDetail}", 11.5, fg: p.WpText.Contains("unlikely") ? AttrBrush.Mid : muted));
+        if (p.HasArranged) Profile.Children.Add(T($"Transfer arranged: {p.ArrangedText}", 12.5, true, AttrBrush.Mid));
         if (p.TransferRule.Length > 0) Profile.Children.Add(T($"Transfer rule: {p.TransferRule}", 11.5, fg: p.CanSign ? muted : AttrBrush.Mid));
         if (p.RiskText.Length > 0) Profile.Children.Add(T($"Risks: {p.RiskText}", 11.5, fg: AttrBrush.Mid));
         if (p.DeltaCaSeason is int dc) Profile.Children.Add(T($"Development: CA {dc:+0;-0;0} this season{(p.DeltaCaLast is int dl ? $", {dl:+0;-0;0} since last load" : "")}", 11.5, fg: dc > 0 ? AttrBrush.Good : muted));
@@ -1218,6 +1279,7 @@ public partial class MainWindow : Window
             head.Children.Add(lbl);
             head.Children.Add(T($"Would he join {my.Name}?", 12.5, true));
             sp.Children.Add(head);
+            if (p.HasArranged) sp.Children.Add(T($"- Already agreed to join {p.Arranged!.ToClub}; you would have to hijack the deal", 11.5, fg: AttrBrush.Mid));
             foreach (var r in p.JoinReasons) sp.Children.Add(T(r, 11.5, fg: r.StartsWith('-') ? AttrBrush.Mid : r.StartsWith('+') ? AttrBrush.Good : muted));
             sp.Children.Add(T("Estimate only. FM decides when you approach him.", 10.5, fg: muted));
             box.Child = sp;
@@ -1293,20 +1355,20 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ saved searches / settings / roles
     static readonly List<SavedSearch> Presets =
     [
-        new() { Name = "★ Wonderkid newgens (≤19, PA 150+)", Filter = new FilterState { Query = "newgen age<=19 pa>=150", Sort = "pa", HideCantSign = true } },
-        new() { Name = "★ Best young newgens we could get", Filter = new FilterState { Query = "newgen age<=21 pa>=squad+20", GettableOnly = true, HideCantSign = true, Sort = "bestpot" } },
-        new() { Name = "★ Loan targets (≤21 at bigger clubs, better than our average)", Filter = new FilterState { Query = "loan", Sort = "bestscore" } },
-        new() { Name = "★ Bargains we could get", Filter = new FilterState { Query = "bargain ca>=squad", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
-        new() { Name = "★ Pre-contracts (free, contract ending ≤ 6 months)", Filter = new FilterState { Query = "precontract ca>=squad", GettableOnly = true, Sort = "bestscore" } },
-        new() { Name = "★ Undervalued high potential", Filter = new FilterState { Query = "age<=23 pa>=squad+30 valueratio<=0.6", HideCantSign = true, Sort = "pa" } },
-        new() { Name = "★ Latest youth intakes (joined in the last 12 months)", Filter = new FilterState { Query = "newgen age<=17 joined>=-12m pa>=squad", Sort = "pa" } },
-        new() { Name = "★ Value for money we could get", Filter = new FilterState { Query = "vfm>0 ca>=squad-10", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
-        new() { Name = "★ Biggest improvers this season", Filter = new FilterState { Query = "dca>=5", Sort = "dca" } },
-        new() { Name = "★ Moneyball: proven scorers we could get", Filter = new FilterState { Query = "gpg>=0.4 apps>=60 age<=30 ca>=squad-10", GettableOnly = true, Sort = "gpg" } },
-        new() { Name = "★ Moneyball: young players with first-team experience", Filter = new FilterState { Query = "age<=21 apps>=40 pa>=squad+10", Sort = "apps" } },
-        new() { Name = "★ Free agents", Filter = new FilterState { Query = "free ca>=squad-10", HideCantSign = true, Sort = "bestscore" } },
-        new() { Name = "★ Contracts ending in 12 months, gettable", Filter = new FilterState { Query = "expires<=12m ca>=squad", GettableOnly = true, Sort = "bestscore" } },
-        new() { Name = "★ No hidden risks, gettable", Filter = new FilterState { Query = "-risky ca>=squad", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ Wonderkid newgens (≤19, PA 150+)", Filter = new FilterState { HideArranged = true, Query = "newgen age<=19 pa>=150", Sort = "pa", HideCantSign = true } },
+        new() { Name = "★ Best young newgens we could get", Filter = new FilterState { HideArranged = true, Query = "newgen age<=21 pa>=squad+20", GettableOnly = true, HideCantSign = true, Sort = "bestpot" } },
+        new() { Name = "★ Loan targets (≤21 at bigger clubs, better than our average)", Filter = new FilterState { HideArranged = true, Query = "loan", Sort = "bestscore" } },
+        new() { Name = "★ Bargains we could get", Filter = new FilterState { HideArranged = true, Query = "bargain ca>=squad", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
+        new() { Name = "★ Pre-contracts (free, contract ending ≤ 6 months)", Filter = new FilterState { HideArranged = true, Query = "precontract ca>=squad", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ Undervalued high potential", Filter = new FilterState { HideArranged = true, Query = "age<=23 pa>=squad+30 valueratio<=0.6", HideCantSign = true, Sort = "pa" } },
+        new() { Name = "★ Latest youth intakes (joined in the last 12 months)", Filter = new FilterState { HideArranged = true, Query = "newgen age<=17 joined>=-12m pa>=squad", Sort = "pa" } },
+        new() { Name = "★ Value for money we could get", Filter = new FilterState { HideArranged = true, Query = "vfm>0 ca>=squad-10", GettableOnly = true, HideCantSign = true, Sort = "vfm" } },
+        new() { Name = "★ Biggest improvers this season", Filter = new FilterState { HideArranged = true, Query = "dca>=5", Sort = "dca" } },
+        new() { Name = "★ Moneyball: proven scorers we could get", Filter = new FilterState { HideArranged = true, Query = "gpg>=0.4 apps>=60 age<=30 ca>=squad-10", GettableOnly = true, Sort = "gpg" } },
+        new() { Name = "★ Moneyball: young players with first-team experience", Filter = new FilterState { HideArranged = true, Query = "age<=21 apps>=40 pa>=squad+10", Sort = "apps" } },
+        new() { Name = "★ Free agents", Filter = new FilterState { HideArranged = true, Query = "free ca>=squad-10", HideCantSign = true, Sort = "bestscore" } },
+        new() { Name = "★ Contracts ending in 12 months, gettable", Filter = new FilterState { HideArranged = true, Query = "expires<=12m ca>=squad", GettableOnly = true, Sort = "bestscore" } },
+        new() { Name = "★ No hidden risks, gettable", Filter = new FilterState { HideArranged = true, Query = "-risky ca>=squad", GettableOnly = true, Sort = "bestscore" } },
     ];
 
     void RefreshSaved()

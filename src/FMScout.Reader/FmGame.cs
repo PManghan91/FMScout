@@ -42,6 +42,9 @@ public sealed record Player(
 public sealed class NoSaveLoadedException() : Exception("FM is running but its people database is empty - no save loaded yet?");
 public sealed class UnknownBuildException(string build) : Exception($"No layout for FM build {build}") { public string Build { get; } = build; }
 
+/// <summary>An agreed future move (FM: "Transfer arranged"): destination club, the date it happens and whether it is a free/pre-contract move.</summary>
+public sealed record ArrangedTransfer(string ToClub, ulong ToClubAddress, DateOnly? Date, bool Free, long WeeklyWage);
+
 public sealed record ClubInfo(ulong Address, string Name, int Reputation);
 
 public sealed record StaffInfo(ulong Address, uint Uid, string Name, string? FullName, DateOnly? DateOfBirth, string? Nationality,
@@ -327,6 +330,50 @@ public sealed class FmGame : IDisposable
 
     int CareerStat(ulong statsObj, Hex field)
         => Layout.Player.CareerStats.Value == 0 || !ProcessMemory.IsObjPtr(statsObj) ? 0 : Memory.Read<ushort>(statsObj + (ulong)field.Value);
+
+    /// <summary>
+    /// Finds agreed future moves. Proposed contracts are separate contract objects (same vtable as current contracts) pointing back
+    /// at the player; the offer record that points at each one says whether it is agreed. Two memory scans, so this takes a few seconds.
+    /// </summary>
+    public Dictionary<ulong, ArrangedTransfer> ArrangedTransfers(IReadOnlyCollection<ulong> players, DateOnly today, CancellationToken ct = default)
+    {
+        var result = new Dictionary<ulong, ArrangedTransfer>();
+        var C = Layout.Contract; var O = Layout.Offers; var P = Layout.Person;
+        ulong vt = 0;
+        foreach (var v in players) { ulong con = Memory.ReadPtr(v + (ulong)P.Contract.Value); if (ProcessMemory.IsObjPtr(con) && InModule(Memory.ReadPtr(con))) { vt = Memory.ReadPtr(con); break; } }
+        if (vt == 0) return result;
+        var playerSet = players as IReadOnlySet<ulong> ?? players.ToHashSet();
+        var extra = new HashSet<ulong>();
+        foreach (var (con, _) in Memory.ScanPointersToAny(new HashSet<ulong> { vt }, privateOnly: true, max: 5_000_000))
+        {
+            ulong person = Memory.ReadPtr(con + (ulong)O.ContractPerson.Value);
+            if (!playerSet.Contains(person) || Memory.ReadPtr(person + (ulong)P.Contract.Value) == con) continue;
+            var start = ReadDate(con + (ulong)C.StartDate.Value);
+            if (start == null || start < today) continue;
+            extra.Add(con);
+        }
+        ct.ThrowIfCancellationRequested();
+        if (extra.Count == 0) return result;
+        var buf = new byte[0x40];
+        foreach (var (rec, con) in Memory.ScanPointersToAny(extra, privateOnly: true, max: 1_000_000))
+        {
+            if (!Memory.TryRead(rec, buf)) continue;
+            if (buf[(int)O.Status.Value] != O.AgreedStatus || buf[(int)O.Agreed.Value] < 1) continue;
+            int kind = buf[(int)O.Kind.Value];
+            if (O.RenewalKinds.Contains(kind)) continue;
+            ulong person = Memory.ReadPtr(con + (ulong)O.ContractPerson.Value);
+            ulong team = Memory.ReadPtr(con + (ulong)C.Team.Value);
+            ulong club = ProcessMemory.IsObjPtr(team) ? Memory.ReadPtr(team + (ulong)Layout.Team.Club.Value) : 0;
+            if (!ProcessMemory.IsObjPtr(club)) continue;
+            ulong curCon = Memory.ReadPtr(person + (ulong)P.Contract.Value);
+            ulong curTeam = ProcessMemory.IsObjPtr(curCon) ? Memory.ReadPtr(curCon + (ulong)C.Team.Value) : 0;
+            if (ProcessMemory.IsObjPtr(curTeam) && Memory.ReadPtr(curTeam + (ulong)Layout.Team.Club.Value) == club) continue; // same club
+            var name = FmString(Memory.ReadPtr(club + (ulong)Layout.Club.Name.Value)) ?? "?";
+            var t = new ArrangedTransfer(name, club, ReadDate(con + (ulong)C.StartDate.Value), O.FreeKinds.Contains(kind), Memory.Read<uint>(con + (ulong)C.WeeklyWage.Value));
+            if (!result.TryGetValue(person, out var old) || (t.Date ?? DateOnly.MaxValue) < (old.Date ?? DateOnly.MaxValue)) result[person] = t;
+        }
+        return result;
+    }
 
     public void Dispose() => Memory.Dispose();
 }

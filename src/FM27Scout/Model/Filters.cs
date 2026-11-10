@@ -50,6 +50,7 @@ public sealed class FilterState
     public bool BargainsOnly { get; set; }
     public bool HideWpUnlikely { get; set; }
     public bool HideCantSign { get; set; }
+    public bool HideArranged { get; set; }
     // Find upgrade settings (editable in the dialog)
     public double UpgradeMargin { get; set; } = 5;
     public double? UpgradeMaxFee { get; set; }
@@ -93,7 +94,7 @@ public sealed class QueryError(string msg) : Exception(msg);
 ///   value&lt;=20m wage&lt;50k finishing&gt;=15 poa&gt;=70 (role code = role score) pot.poa&gt;=80 best&gt;=75
 ///   contract&lt;=2037 foot:left gk   (bare words match the name)
 ///   expires&lt;=6m joined&gt;=-12m (relative to the game date)  ca&gt;=squad+5 (vs your squad's median CA)  age:18-23 (range)
-///   -newgen / !bargain (negation)  loan  cansign  precontract  risky  risk:injury  nfs  improving  dca&gt;=5
+///   -newgen / !bargain (negation)  loan  cansign  precontract  trn (transfer arranged; -trn to hide)  risky  risk:injury  nfs  improving  dca&gt;=5
 ///   regen bargain valueratio&lt;=0.5   join&gt;=60 rep&lt;=6000 wrep&gt;=3000 status:"Squad Player" willing:likely
 /// </summary>
 public static class FilterBuilder
@@ -140,6 +141,7 @@ public static class FilterBuilder
         if (f.BargainsOnly) preds.Add(p => p.IsBargain);
         if (f.HideWpUnlikely) preds.Add(p => !p.WpText.Contains("unlikely"));
         if (f.HideCantSign) preds.Add(p => p.CanSign);
+        if (f.HideArranged || f.UpgradeForUid != null) preds.Add(p => !p.HasArranged); // upgrades never suggest players already sold
         if (f.GettableOnly) { var gm = f.GettableMin; preds.Add(p => p.Join >= gm); }
 
         foreach (var (name, min) in f.AttributeMin)
@@ -198,6 +200,7 @@ public static class FilterBuilder
             case "shortlist": return p => Shortlist.Contains(p.Uid);
             case "cansign" or "signable": return p => p.CanSign;
             case "precontract": return p => p.PreContract;
+            case "trn" or "arranged" or "transferarranged": return p => p.HasArranged;
             case "risky": return p => p.RiskCount > 0;
             case "nfs": return p => p.NotForSale;
             case "improving": return p => p.DeltaCaSeason > 0;

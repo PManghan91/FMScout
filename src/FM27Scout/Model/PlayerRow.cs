@@ -73,6 +73,11 @@ public sealed class PlayerRow
     public bool CanSign { get; set; } = true;
     /// <summary>A pre-contract (free transfer agreed in advance) is possible because his contract ends within 6 months.</summary>
     public bool PreContract { get; set; }
+    /// <summary>Agreed future move (FM "Transfer arranged"), filled in shortly after loading.</summary>
+    public FMScout.Reader.ArrangedTransfer? Arranged { get; set; }
+    public bool HasArranged => Arranged != null;
+    public string ArrangedText => Arranged is { } t ? $"→ {t.ToClub}" + (t.Date is DateOnly d ? $" {d:dd/MM/yy}" : "") + (t.Free ? " (free)" : "") : "";
+    public DateOnly ArrangedSort => Arranged?.Date ?? DateOnly.MaxValue;
     /// <summary>Estimated fee in £ (0 = free / pre-contract; NaN = not for sale).</summary>
     public double Fee { get; set; }
     /// <summary>Role-score gain over your best player in that role, per £1M of fee + 2 years' wages (current ability).</summary>

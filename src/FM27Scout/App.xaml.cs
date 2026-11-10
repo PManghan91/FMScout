@@ -56,6 +56,8 @@ public partial class App : Application
         log.WriteLine(w.SelfTestWp());
         log.WriteLine(w.SelfTestUpgrade());
         log.WriteLine(w.SelfTestQa());
+        log.WriteLine($"arranged transfers: {w.SelfTestArranged()}");
+        foreach (var q in new[] { "trn", "trn ca>=120", "caron allen", "shortlist -trn", "trn Harvey Elliott" }) log.WriteLine($"query [{q}] -> {w.SelfTestQuery(q)}");
 
         w.SelfTestQuery("age<=23 pa>=160");
         w.SelfTestSelect(0);
@@ -65,6 +67,15 @@ public partial class App : Application
         Render(w, Path.Combine(outDir, "selftest-clubs.png"), 3);
         Render(w, Path.Combine(outDir, "selftest-staff.png"), 4);
         Render(w, Path.Combine(outDir, "selftest-shortlist.png"), 5);
+        foreach (var n in new[] { "Caron Allen", "Haaland" })
+            if (w.SelfTestProfileCard(n) is FrameworkElement card)
+            {
+                card.Measure(new Size(card.Width, double.PositiveInfinity)); card.Arrange(new Rect(card.DesiredSize)); card.UpdateLayout();
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)card.ActualWidth, (int)card.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                bmp.Render(card);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder(); enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                using var fs = File.Create(Path.Combine(outDir, $"selftest-profile-{n.Replace(" ", "")}.png")); enc.Save(fs);
+            }
         RenderMenu(w.SelfTestColumnsMenu(), Path.Combine(outDir, "selftest-menu.png"));
         File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString());
     }

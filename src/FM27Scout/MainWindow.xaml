@@ -65,6 +65,7 @@
                                             <CheckBox x:Name="FBargains" Content="Bargains only" Width="128"/>
                                             <CheckBox x:Name="FHideWp" Content="Hide WP unlikely" Width="128"/>
                                             <CheckBox x:Name="FHideCantSign" Content="Hide can't sign" Width="128" ToolTip="e.g. foreign under-18s for a UK club"/>
+                            <CheckBox x:Name="FHideTrn" Content="Exclude transfer arranged" Width="200" ToolTip="Hide players who already have an agreed move to another club (FM: Transfer arranged). Query: -trn"/>
                                         </WrapPanel>
                                     </Expander>
                                     <Expander Header="Basics" IsExpanded="True">
@@ -278,6 +279,7 @@
                                 <TextBox x:Name="SlPaMin" Width="44" TextChanged="SlFilter_Changed"/>
                                 <CheckBox x:Name="SlGettable" Content="Gettable only" Margin="14,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
                                 <CheckBox x:Name="SlCanSign" Content="Hide can't sign" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
+                                <CheckBox x:Name="SlNoTrn" Content="Exclude transfer arranged" IsChecked="True" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click" ToolTip="Hide players who already have an agreed move elsewhere"/>
                                 <Button Content="Clear" Margin="10,0,0,0" Click="SlClear_Click"/>
                                 <TextBlock x:Name="SlError" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="IndianRed"/>
                             </WrapPanel>
@@ -299,6 +301,7 @@
                             <DataGridTextColumn Header="Join %" Binding="{Binding Join, StringFormat=F0}"/>
                             <DataGridTextColumn Header="Would join?" Binding="{Binding JoinLabel}" Width="100"/>
                             <DataGridTextColumn Header="WP" Binding="{Binding WpText}" Width="140"/>
+                            <DataGridTextColumn Header="Transfer arranged" Binding="{Binding ArrangedText}" SortMemberPath="ArrangedSort" Width="190"/>
                             <DataGridTextColumn Header="Rule" Binding="{Binding TransferRule}" Width="200"/>
                             <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
                             <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>

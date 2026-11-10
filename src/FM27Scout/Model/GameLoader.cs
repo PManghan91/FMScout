@@ -127,6 +127,15 @@ public static class GameLoader
         }
     }
 
+    /// <summary>Second pass after a load: finds agreed future transfers (two memory scans, ~20-30 s). Returns player address → move.</summary>
+    public static Dictionary<ulong, ArrangedTransfer> LoadArranged(IReadOnlyCollection<PlayerRow> rows, CancellationToken ct)
+    {
+        var (layouts, _, _) = LoadLayouts();
+        using var game = FmGame.Attach(layouts);
+        var today = game.GameDate ?? DateOnly.FromDateTime(DateTime.Today);
+        return game.ArrangedTransfers(rows.Select(r => r.Source.Address).ToHashSet(), today, ct);
+    }
+
     public static LoadResult Load(RoleSet roles, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         try { return LoadCore(roles, progress, ct); }

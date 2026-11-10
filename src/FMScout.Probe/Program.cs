@@ -88,6 +88,404 @@ if (args.Length > 0 && args[0] == "statsfind")
     }
     return;
 }
+if (args.Length > 0 && args[0] == "arranged")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var pl = g.PlayerPointers().ToHashSet();
+    var t = g.ArrangedTransfers(pl, g.GameDate!.Value);
+    Console.WriteLine($"{t.Count} arranged in {sw.ElapsedMilliseconds} ms");
+    foreach (var (person, a) in t.OrderBy(x => x.Value.Date).Take(25)) { var p2 = g.ReadPlayer(person); Console.WriteLine($"  {p2.Name,-28} CA {p2.CurrentAbility,3} {p2.Club,-28} -> {a.ToClub,-28} {a.Date} {(a.Free ? "free" : "")}"); }
+    foreach (var n in args.Skip(1)) foreach (var (person, a) in t) { var p2 = g.ReadPlayer(person); if (p2.Name.Contains(n)) Console.WriteLine($"  * {p2.Name} {p2.Club} -> {a.ToClub} {a.Date} free={a.Free}"); }
+    return;
+}
+if (args.Length > 0 && args[0] == "who")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var names = args.Skip(1).ToArray();
+    var targets = g.PlayerPointers().Where(pp => names.Any(n => g.ReadPlayer(pp).Name.Contains(n))).ToHashSet();
+    foreach (var t in targets) { var pl = g.ReadPlayer(t); Console.WriteLine($"{pl.Name} {pl.Club} person {t:X} cur con {m2.ReadPtr(t + 0xA8):X}"); }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).Where(c2 => targets.Contains(m2.ReadPtr(c2 + 8))).ToList();
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        ulong club = m2.ReadPtr(m2.ReadPtr(con + 0x10) + 0x30);
+        Console.WriteLine($" contract {con:X} {(m2.ReadPtr(person + 0xA8) == con ? "CUR " : "xtra")} -> {g.FmString(m2.ReadPtr(club + 0xC0))} start {g.ReadDate(con + 0x44)} exp {g.ReadDate(con + 0x48)} wage {m2.Read<uint>(con + 0x20)}");
+        foreach (var (at, _) in m2.ScanPointersToAny(new HashSet<ulong> { con }, privateOnly: true, max: 20))
+        {
+            var rb = m2.ReadBytes(at, 0x38);
+            Console.WriteLine($"    ref {at:X}: {(rb == null ? "" : Convert.ToHexString(rb))}");
+        }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "offers")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    var names = args.Skip(1).ToArray();
+    int withOffers = 0, agreed = 0;
+    foreach (var person in g.PlayerPointers())
+    {
+        ulong con = m2.ReadPtr(person + 0xA8); if (!ProcessMemory.IsObjPtr(con)) continue;
+        ulong neg = m2.ReadPtr(con + 0x130); if (!ProcessMemory.IsObjPtr(neg)) continue;
+        ulong b = m2.ReadPtr(neg + 0x20), e = m2.ReadPtr(neg + 0x28);
+        if (!ProcessMemory.IsObjPtr(b) || e < b || e - b > 8 * 200) continue;
+        bool show = names.Length > 0 && names.Any(n => g.ReadPlayer(person).Name.Contains(n));
+        if (e > b) withOffers++;
+        bool any = false;
+        for (ulong a = b; a < e; a += 8)
+        {
+            ulong r = m2.ReadPtr(a); ulong oc = m2.ReadPtr(r + 0x10);
+            var rb = m2.ReadBytes(r + 0x10, 0x48); if (rb == null) continue;
+            if (rb[0x2E] == 2 && rb[0x31] != 8) any = true;
+            if (show)
+            {
+                ulong club = ProcessMemory.IsObjPtr(oc) ? m2.ReadPtr(m2.ReadPtr(oc + 0x10) + 0x30) : 0;
+                Console.WriteLine($"  {g.ReadPlayer(person).Name}: -> {(club != 0 ? g.FmString(m2.ReadPtr(club + 0xC0)) : "?")} start {(oc != 0 ? g.ReadDate(oc + 0x44) : null)} 2E={rb[0x2E]} 30={rb[0x30]} 31={rb[0x31]} bytes {Convert.ToHexString(rb, 0x18, 0x30)}");
+            }
+        }
+        if (show) Console.WriteLine($"  {g.ReadPlayer(person).Name}: con {con:X} neg {neg:X} n={(e - b) / 8}");
+        if (any) agreed++;
+    }
+    Console.WriteLine($"players with offers list entries {withOffers}, with agreed (2E=2, not renewal) {agreed}");
+    return;
+}
+if (args.Length > 0 && args[0] == "backrefs")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var mod = m2.Module("game_plugin.dll")!.Value;
+    bool InMod(ulong q) => q >= mod.Base && q < mod.Base + (ulong)mod.Size;
+    ulong at = ulong.Parse(args[1], System.Globalization.NumberStyles.HexNumber);
+    for (int depth = 0; depth < 6; depth++)
+    {
+        var near = new HashSet<ulong>(); for (ulong a = at - 0x180; a <= at; a += 8) near.Add(a);
+        var hits = m2.ScanPointersToAny(near, privateOnly: false, max: 40);
+        Console.WriteLine($"depth {depth}: target {at:X}: {hits.Count} refs");
+        for (ulong a = at - 0x40; a <= at + 0x18; a += 8) Console.Write($" {m2.ReadPtr(a):X}"); Console.WriteLine();
+        foreach (var (h, v) in hits.Take(12)) Console.WriteLine($"   {h:X} -> {v:X} (off -{at - v:X}) {(InMod(h) ? $"STATIC rva {h - mod.Base:X}" : "")} vt@v={(InMod(m2.ReadPtr(v)) ? (m2.ReadPtr(v) - mod.Base).ToString("X") : "-")}");
+        var pick = hits.Where(x => !InMod(x.At)).Select(x => x.At).ToList();
+        if (hits.Any(x => InMod(x.At)) || pick.Count == 0) break;
+        at = pick[0];
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "ptrarray")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var mod = m2.Module("game_plugin.dll")!.Value;
+    bool InMod(ulong q) => q >= mod.Base && q < mod.Base + (ulong)mod.Size;
+    ulong at0 = ulong.Parse(args[1], System.Globalization.NumberStyles.HexNumber);
+    int stride = args.Length > 2 ? int.Parse(args[2]) : 8;
+    ulong b = at0; while (ProcessMemory.IsObjPtr(m2.ReadPtr(b - (ulong)stride))) b -= (ulong)stride;
+    ulong e = at0; while (ProcessMemory.IsObjPtr(m2.ReadPtr(e))) e += (ulong)stride;
+    Console.WriteLine($"ptr array {b:X}..{e:X} n={(e - b) / (ulong)stride}; before: {m2.ReadPtr(b - 8):X} {m2.ReadPtr(b - 16):X}");
+    var level = new HashSet<ulong> { b };
+    for (int depth = 0; depth < 6; depth++)
+    {
+        var hits = m2.ScanPointersToAny(level, privateOnly: false, max: 50);
+        Console.WriteLine($"depth {depth}: {hits.Count} refs to {string.Join(",", level.Select(x => x.ToString("X")))}");
+        var next = new HashSet<ulong>();
+        foreach (var (at, val) in hits)
+        {
+            bool stat = InMod(at);
+            Console.WriteLine($"   {at:X} -> {val:X} {(stat ? $"STATIC rva {at - mod.Base:X}" : "")}  +8={m2.ReadPtr(at + 8):X} +10={m2.ReadPtr(at + 16):X}");
+            if (stat) continue;
+            for (int k = 0; k <= 0x800; k += 8) { ulong q = m2.ReadPtr(at - (ulong)k); if (InMod(q)) { Console.WriteLine($"      owner {at - (ulong)k:X} vt {q - mod.Base:X} field +{k:X}"); next.Add(at - (ulong)k); break; } }
+        }
+        if (next.Count == 0 || next.Count > 10) break; level = next;
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "offerroot")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory;
+    var mod = m2.Module("game_plugin.dll")!.Value;
+    bool InMod(ulong q) => q >= mod.Base && q < mod.Base + (ulong)mod.Size;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    bool IsCon(ulong q) => ProcessMemory.IsObjPtr(q) && m2.TryRead(q, new byte[8]) && m2.ReadPtr(q) == contractVt;
+    ulong rec = ulong.Parse(args[1], System.Globalization.NumberStyles.HexNumber);
+    ulong begin = rec; while (IsCon(m2.ReadPtr(begin - 0x48))) begin -= 0x48;
+    ulong end = rec; while (IsCon(m2.ReadPtr(end))) end += 0x48;
+    Console.WriteLine($"array {begin:X}..{end:X} = {(end - begin) / 0x48} records");
+    for (ulong a = begin - 0x90; a < begin + 0x10; a += 8) Console.WriteLine($"  {a:X}: {m2.ReadPtr(a):X16}");
+    for (ulong a = end - 0x10; a < end + 0x60; a += 8) Console.WriteLine($"  {a:X}: {m2.ReadPtr(a):X16}");
+    var near = new HashSet<ulong>(); for (ulong a = begin - 0x100; a <= begin + 0x48; a += 8) near.Add(a);
+    foreach (var (at, val) in m2.ScanPointersToAny(near, privateOnly: false, max: 50)) Console.WriteLine($"  ref {at:X} -> {val:X} (begin{(long)val - (long)begin:+#;-#;0})  +8={m2.ReadPtr(at + 8):X} +10={m2.ReadPtr(at + 16):X}");
+    var level = new HashSet<ulong> { begin };
+    for (int depth = 0; depth < 4; depth++)
+    {
+        var hits = m2.ScanPointersToAny(level, privateOnly: false, max: 200);
+        Console.WriteLine($"depth {depth}: {hits.Count} refs");
+        var next = new HashSet<ulong>();
+        foreach (var (at, val) in hits)
+        {
+            bool stat = at >= mod.Base && at < mod.Base + (ulong)mod.Size;
+            Console.WriteLine($"   {at:X} -> {val:X} {(stat ? $"STATIC rva {at - mod.Base:X}" : "")}  +8={m2.ReadPtr(at + 8):X} +10={m2.ReadPtr(at + 16):X}");
+            if (stat) continue;
+            for (int k = 0; k <= 0x400; k += 8) { ulong q = m2.ReadPtr(at - (ulong)k); if (InMod(q)) { Console.WriteLine($"      owner {at - (ulong)k:X} vt {q - mod.Base:X} field +{k:X}"); next.Add(at - (ulong)k); break; } }
+        }
+        if (next.Count == 0) break; level = next;
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "offerhist")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    var players = g.PlayerPointers().ToHashSet();
+    var per = new Dictionary<ulong, int>(); var extra = new HashSet<ulong>();
+    foreach (var con in all) { ulong person = m2.ReadPtr(con + 8); if (players.Contains(person) && m2.ReadPtr(person + 0xA8) != con) { per[person] = per.GetValueOrDefault(person) + 1; extra.Add(con); } }
+    var hist = new SortedDictionary<string, int>(); var ex = new Dictionary<string, List<string>>();
+    foreach (var (at, con) in m2.ScanPointersToAny(extra, privateOnly: true, max: 100000))
+    {
+        var r = m2.ReadBytes(at, 0x48); if (r == null) continue;
+        ulong person = m2.ReadPtr(con + 8);
+        var s = g.ReadDate(con + 0x44);
+        string k = $"{(per[person] == 1 ? "single" : "multi ")} {(s > today ? "fut " : "past")} 2E={r[0x2E]:X2} 2F={r[0x2F]:X2} 30={r[0x30]:X2} 31={r[0x31]:X2} 1Cneg={(BitConverter.ToInt32(r, 0x1C) < 0 ? 1 : 0)} 8={(BitConverter.ToUInt64(r, 8) != 0 ? 1 : 0)}";
+        hist[k] = hist.GetValueOrDefault(k) + 1;
+        if (!ex.TryGetValue(k, out var l)) ex[k] = l = new();
+        if (l.Count < 3) { var pl = g.ReadPlayer(person); ulong club = m2.ReadPtr(m2.ReadPtr(con + 0x10) + 0x30); l.Add($"{pl.Name} ({pl.Club}) -> {g.FmString(m2.ReadPtr(club + 0xC0))} {s}"); }
+    }
+    foreach (var (k, n) in hist) if (n >= 5) Console.WriteLine($"{n,6} {k}   e.g. {string.Join(" | ", ex[k])}");
+    return;
+}
+if (args.Length > 0 && args[0] == "contractrefs2")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    var mod = m2.Module("game_plugin.dll")!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    var players = g.PlayerPointers().ToHashSet();
+    var names = args.Skip(1).ToArray();
+    var want = new Dictionary<ulong, string>();
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        if (!players.Contains(person) || m2.ReadPtr(person + 0xA8) == con) continue;
+        var pl = g.ReadPlayer(person); if (!names.Any(n => pl.Name.Contains(n))) continue;
+        ulong team = m2.ReadPtr(con + 0x10), club = m2.ReadPtr(team + 0x30);
+        want[con] = $"{pl.Name} -> {g.FmString(m2.ReadPtr(club + 0xC0))}";
+    }
+    foreach (var (at, val) in m2.ScanPointersToAny(want.Keys.ToHashSet(), privateOnly: true, max: 1000))
+    {
+        Console.WriteLine($"{want[val]}  ref at {at:X}");
+        for (int k = -0x40; k <= 0x40; k += 8)
+        {
+            ulong q = m2.ReadPtr((ulong)((long)at + k));
+            string d = q >= mod.Base && q < mod.Base + (ulong)mod.Size ? $" vt {q - mod.Base:X}" : "";
+            if (ProcessMemory.IsObjPtr(q)) { ulong vt = m2.ReadPtr(q); if (vt >= mod.Base && vt < mod.Base + (ulong)mod.Size) d += $" -> obj vt {vt - mod.Base:X}"; }
+            Console.WriteLine($"    {k,4}: {q:X16}{d}");
+        }
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "contractrefs")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    var mod = m2.Module("game_plugin.dll")!.Value;
+    bool InMod(ulong q) => q >= mod.Base && q < mod.Base + (ulong)mod.Size;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    var players = g.PlayerPointers().ToHashSet();
+    var kind = new Dictionary<ulong, string>();
+    var per = new Dictionary<ulong, int>();
+    foreach (var con in all) { ulong person = m2.ReadPtr(con + 8); if (players.Contains(person) && m2.ReadPtr(person + 0xA8) != con) per[person] = per.GetValueOrDefault(person) + 1; }
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        if (!players.Contains(person)) continue;
+        if (m2.ReadPtr(person + 0xA8) == con) kind[con] = "cur";
+        else { var s = g.ReadDate(con + 0x44); kind[con] = (per[person] == 1 ? "single-" : "multi-") + (s > today ? "fut" : "past"); }
+    }
+    var refs = m2.ScanPointersToAny(kind.Keys.ToHashSet(), privateOnly: true, max: 5_000_000);
+    Console.WriteLine($"{refs.Count} refs");
+    var hist = new Dictionary<string, int>();
+    foreach (var (at, val) in refs)
+    {
+        string owner = "?";
+        for (int k = 0; k <= 0x200; k += 8) { ulong q = m2.ReadPtr(at - (ulong)k); if (InMod(q)) { owner = $"vt{q - mod.Base:X}+{k:X}"; break; } }
+        string key = $"{kind[val],-12} {owner}";
+        hist[key] = hist.GetValueOrDefault(key) + 1;
+    }
+    foreach (var (k, n) in hist.OrderBy(x => x.Key)) if (n >= 20) Console.WriteLine($"{n,7} {k}");
+    return;
+}
+if (args.Length > 0 && args[0] == "contracthist")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    var players = g.PlayerPointers().ToHashSet();
+    var per = new Dictionary<ulong, List<ulong>>();
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        if (!players.Contains(person) || m2.ReadPtr(person + 0xA8) == con) continue;
+        if (!per.TryGetValue(person, out var l)) per[person] = l = new();
+        l.Add(con);
+    }
+    var hist = new SortedDictionary<string, int>();
+    foreach (var (person, l) in per)
+        foreach (var con in l)
+        {
+            var start = g.ReadDate(con + 0x44); string when = start == null ? "none" : start > today ? "fut" : "past";
+            string k = $"{(l.Count == 1 ? "single" : "multi ")} {when} 5A={m2.Read<byte>(con + 0x5A):X2} 59={m2.Read<byte>(con + 0x59):X2} 5B={m2.Read<byte>(con + 0x5B):X2} 54={m2.Read<byte>(con + 0x54):X2}";
+            hist[k] = hist.GetValueOrDefault(k) + 1;
+        }
+    foreach (var (k, n) in hist) if (n >= 15) Console.WriteLine($"{n,6} {k}");
+    Console.WriteLine($"players with extras {per.Count}, single {per.Count(x => x.Value.Count == 1)}");
+    return;
+}
+if (args.Length > 0 && args[0] == "contractdump")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    var names = args.Skip(1).ToHashSet();
+    var players = g.PlayerPointers().ToHashSet();
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        if (!players.Contains(person)) continue;
+        var pl = g.ReadPlayer(person);
+        if (!names.Any(n => pl.Name.Contains(n))) continue;
+        bool cur = m2.ReadPtr(person + 0xA8) == con;
+        ulong team = m2.ReadPtr(con + 0x10), club = team > 0x10000 ? m2.ReadPtr(team + 0x30) : 0;
+        var b = m2.ReadBytes(con, 0x90);
+        Console.WriteLine($"{pl.Name} {(cur ? "CUR" : "xtra")} -> {g.FmString(m2.ReadPtr(club + 0xC0))}");
+        for (int i = 0x18; i < 0x90; i += 0x10) Console.WriteLine($"   {i:X2}: {Convert.ToHexString(b, i, Math.Min(16, 0x90 - i))}");
+    }
+    return;
+}
+if (args.Length > 0 && args[0] == "extracontracts")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var today = g.GameDate!.Value;
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers()) { ulong con = m2.ReadPtr(v + 0xA8); if (con > 0x10000) { contractVt = m2.ReadPtr(con); break; } }
+    var all = m2.ScanPointersToAny(new HashSet<ulong> { contractVt }, privateOnly: true, max: 2_000_000).Select(h => h.At).ToList();
+    Console.WriteLine($"{all.Count} contract objects");
+    var players = g.PlayerPointers().ToHashSet();
+    int extra = 0; var byStart = new Dictionary<string, int>();
+    foreach (var con in all)
+    {
+        ulong person = m2.ReadPtr(con + 8);
+        if (!players.Contains(person)) continue;
+        if (m2.ReadPtr(person + 0xA8) == con) continue;
+        extra++;
+        var start = g.ReadDate(con + 0x44); var key = start == null ? "none" : start > today ? "future" : "past";
+        byStart[key] = byStart.GetValueOrDefault(key) + 1;
+        if (extra <= 20)
+        {
+            var pl = g.ReadPlayer(person);
+            ulong team = m2.ReadPtr(con + 0x10), club = team > 0x10000 ? m2.ReadPtr(team + 0x30) : 0;
+            Console.WriteLine($"  {pl.Name,-26} CA {pl.CurrentAbility,3} now {pl.Club,-26} -> {g.FmString(m2.ReadPtr(club + 0xC0)),-26} start {start} exp {g.ReadDate(con + 0x48)} wage {m2.Read<uint>(con + 0x20)} job {m2.Read<byte>(con + 0x26)} st {m2.Read<byte>(con + 0x54)}");
+        }
+    }
+    Console.WriteLine($"extra contracts on players: {extra}; by start date: {string.Join(", ", byStart.Select(k => $"{k.Key} {k.Value}"))}");
+    return;
+}
+if (args.Length > 0 && args[0] == "futurecontract")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var counts = new Dictionary<int, int>(); var examples = new Dictionary<int, List<string>>();
+    ulong contractVt = 0;
+    foreach (var v in g.PlayerPointers())
+    {
+        ulong con = m2.ReadPtr(v + 0xA8); if (con < 0x10000) continue;
+        if (contractVt == 0) contractVt = m2.ReadPtr(con);
+        var pr = m2.ReadBytes(v, 0x200); if (pr == null) continue;
+        for (int off = 0; off < 0x200; off += 8)
+        {
+            if (off == 0xA8) continue;
+            ulong q = BitConverter.ToUInt64(pr, off);
+            if (q < 0x10000 || (q & 7) != 0) continue;
+            if (m2.ReadPtr(q) != contractVt) continue;
+            counts[off] = counts.GetValueOrDefault(off) + 1;
+            if (!examples.TryGetValue(off, out var l)) examples[off] = l = new();
+            if (l.Count < 8)
+            {
+                var pl = g.ReadPlayer(v);
+                ulong team = m2.ReadPtr(q + 0x10), club = team > 0x10000 ? m2.ReadPtr(team + 0x30) : 0;
+                l.Add($"{pl.Name} (now {pl.Club}) -> {g.FmString(m2.ReadPtr(club + 0xC0))} start {g.ReadDate(q + 0x44)} wage {m2.Read<uint>(q + 0x20)}");
+            }
+        }
+    }
+    Console.WriteLine($"contract vtable 0x{contractVt:X}");
+    foreach (var (off, n) in counts.OrderBy(k => k.Key)) { Console.WriteLine($"person+0x{off:X}: {n} players"); foreach (var s in examples[off]) Console.WriteLine("    " + s); }
+    return;
+}
+if (args.Length > 0 && args[0] == "rel74")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; int code = int.Parse(args[1]); int shown = 0, same = 0, total = 0, expSoon = 0;
+    foreach (var v in g.PlayerPointers())
+    {
+        ulong obj = m2.ReadPtr(v + 0x78); if (obj < 0x10000) continue;
+        ulong b = m2.ReadPtr(obj), e = m2.ReadPtr(obj + 8); long n = (long)(e - b) / 16; if (n <= 0 || n > 400) continue;
+        var bytes = m2.ReadBytes(b, (int)n * 16); if (bytes == null) continue;
+        for (int i = 0; i < n; i++)
+        {
+            if (bytes[i * 16 + 0xA] != 1 || bytes[i * 16 + 0xB] != code) continue;
+            var p = g.ReadPlayer(v); ulong t = BitConverter.ToUInt64(bytes, i * 16);
+            string target = g.FmString(m2.ReadPtr(t + 0xC0)) ?? "?";
+            total++; if (target == p.Club) same++; if (p.ContractExpiry is { } x && x <= new DateOnly(2037, 6, 30)) expSoon++;
+            if (shown++ < 25) Console.WriteLine($"  {p.Name,-26} CA {p.CurrentAbility,3} now: {p.Club,-28} -> {target,-28} exp {p.ContractExpiry} raw {BitConverter.ToString(bytes, i * 16 + 8, 8)}");
+        }
+    }
+    Console.WriteLine($"total {total}, target == current club {same}, contract ending by 30/6/2037 {expSoon}");
+    return;
+}
+if (args.Length > 0 && args[0] == "relhist")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var m2 = g.Memory; var hist = new Dictionary<(int kind, int rel), int>(); var ex = new Dictionary<(int, int), string>();
+    foreach (var v in g.PlayerPointers().Take(150000))
+    {
+        ulong obj = m2.ReadPtr(v + 0x78); if (obj < 0x10000) continue;
+        ulong b = m2.ReadPtr(obj), e = m2.ReadPtr(obj + 8); long n = (long)(e - b) / 16; if (n <= 0 || n > 400) continue;
+        var bytes = m2.ReadBytes(b, (int)n * 16); if (bytes == null) continue;
+        var seen = new HashSet<(int, int)>();
+        for (int i = 0; i < n; i++)
+        {
+            var k = ((int)bytes[i * 16 + 0xA], (int)bytes[i * 16 + 0xB]);
+            if (!seen.Add(k)) continue;
+            hist[k] = hist.GetValueOrDefault(k) + 1;
+            if (!ex.ContainsKey(k) && k.Item1 == 1) { ulong t = BitConverter.ToUInt64(bytes, i * 16); ex[k] = $"{Analysis.Name(m2, v)} -> {g.FmString(m2.ReadPtr(t + 0xC0))} (b8-9: {bytes[i * 16 + 8]} {bytes[i * 16 + 9]} str {bytes[i * 16 + 0xC]})"; }
+        }
+    }
+    foreach (var kv in hist.OrderBy(k => k.Key)) Console.WriteLine($"kind {kv.Key.kind,3} rel {kv.Key.rel,3}: {kv.Value,7} players   {ex.GetValueOrDefault(kv.Key)}");
+    return;
+}
+if (args.Length > 0 && args[0] == "futurejoins")
+{
+    using var g = FmGame.Attach(Report.FindLayout());
+    var today = g.GameDate!.Value;
+    var ps = g.PlayerPointers().Select(g.ReadPlayer).Where(p => p.ContractStart > today).ToList();
+    Console.WriteLine($"{ps.Count} players with a contract starting after {today}");
+    foreach (var p in ps.OrderByDescending(p => p.CurrentAbility).Take(15))
+        Console.WriteLine($"  {p.Name,-26} club now: {p.Club,-26} starts {p.ContractStart} expires {p.ContractExpiry} prev(+0x108): {p.LinkedClub}");
+    return;
+}
 if (args.Length > 0 && args[0] == "staffsolve") { using var g = FmGame.Attach(Report.FindLayout()); StaffSolve.Run(g); return; }
 if (args.Length > 0 && args[0] == "staffpick")
 {
@@ -447,6 +845,23 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

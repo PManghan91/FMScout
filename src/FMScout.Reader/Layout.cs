@@ -30,6 +30,7 @@ public sealed class BuildLayout
     public NationLayout Nation { get; set; } = new();
     public ClubLayout Club { get; set; } = new();
     public ContractLayout Contract { get; set; } = new();
+    public OfferLayout Offers { get; set; } = new();
     public TeamLayout Team { get; set; } = new();
     public PlayerLayout Player { get; set; } = new();
     public string[] PositionNames { get; set; } = [];
@@ -75,6 +76,20 @@ public sealed class PersonLayout
 }
 
 public sealed class ContractLayout { public Hex Team { get; set; } public Hex WeeklyWage { get; set; } public Hex StartDate { get; set; } public Hex ExpiryDate { get; set; } public Hex SquadStatus { get; set; } public Hex Job { get; set; } }
+/// <summary>
+/// Transfer/contract offers: each offer is a record holding a pointer to the proposed (future) contract, whose +0x8 is the player.
+/// Status 2 with "agreed" >= 1 means the deal is agreed (FM shows "Transfer arranged"); kind 8 is a renewal at the same club.
+/// </summary>
+public sealed class OfferLayout
+{
+    public Hex ContractPerson { get; set; } = new(0x8);
+    public Hex Status { get; set; } = new(0x2E);
+    public int AgreedStatus { get; set; } = 2;
+    public Hex Agreed { get; set; } = new(0x30);
+    public Hex Kind { get; set; } = new(0x31);
+    public int[] RenewalKinds { get; set; } = [8];
+    public int[] FreeKinds { get; set; } = [6, 7];
+}
 public sealed class TeamLayout { public Hex Club { get; set; } public Hex Competition { get; set; } public Hex CompetitionName { get; set; } public Hex CompetitionNation { get; set; } }
 
 public sealed class NationLayout { public Hex Name { get; set; } public Hex Code { get; set; } public Hex Nationality { get; set; } }
