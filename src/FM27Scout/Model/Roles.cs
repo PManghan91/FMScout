@@ -27,6 +27,7 @@ public sealed class RoleSet
     public FamiliarityRule[] Familiarity { get; set; } = [];
     public AgeRule[] PotentialAge { get; set; } = [];
     public RoleDef[] Roles { get; set; } = [];
+    [System.Text.Json.Serialization.JsonIgnore] public int MergedBuiltIns { get; set; }
     public string? SourcePath { get; private set; }
     /// <summary>Fitted from the save at load time; when set, potential growth follows CA importance per position.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public PotentialModel? Potential { get; set; }
@@ -47,6 +48,15 @@ public sealed class RoleSet
             File.WriteAllText(path, Embedded.Read("roles.json"));
             set = JsonSerializer.Deserialize<RoleSet>(Embedded.Read("roles.json"), Opts)!;
         }
+        // built-in roles added in newer versions: merge any the user's file doesn't have yet (their own edits are kept)
+        try
+        {
+            var builtIn = JsonSerializer.Deserialize<RoleSet>(Embedded.Read("roles.json"), Opts)!;
+            var have = set.Roles.Select(r => r.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missing = builtIn.Roles.Where(r => !have.Contains(r.Code)).ToArray();
+            if (missing.Length > 0) { set.Roles = [.. set.Roles, .. missing]; set.MergedBuiltIns = missing.Length; }
+        }
+        catch { }
         set.SourcePath = path;
         set.Compile();
         return set;
