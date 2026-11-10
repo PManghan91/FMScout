@@ -1078,7 +1078,7 @@ public partial class MainWindow : Window
             facts.Children.Add(sp);
         }
         Fact("CA", p.CA.ToString()); Fact("PA", p.PA.ToString());
-        Fact("Value", p.Value > 0 ? MoneyText.Format(p.Value) : "-");
+        Fact("Value", p.ValueText);
         Fact("Wage", p.Wage > 0 ? MoneyText.Format(p.Wage) + " p/w" : "-");
         Fact("Expires", p.ContractExpiry?.ToString("dd/MM/yyyy") ?? "-");
         Fact("Height", $"{p.Height} cm");
@@ -1313,6 +1313,7 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
 
 
 

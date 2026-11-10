@@ -143,40 +143,6 @@
                 </Grid>
             </TabItem>
 
-            <TabItem x:Name="ShortlistTab" Header="★ Shortlist">
-                <DockPanel>
-                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Text="   All shortlisted players, whatever the Players filters. Right-click: compare / remove · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
-                            <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
-                        </StackPanel>
-                    </Border>
-                    <DataGrid x:Name="ShortlistGrid" MouseDoubleClick="ShortlistGrid_DoubleClick">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
-                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
-                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
-                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="170"/>
-                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
-                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
-                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="160"/>
-                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
-                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
-                            <DataGridTextColumn Header="Join %" Binding="{Binding Join, StringFormat=F0}"/>
-                            <DataGridTextColumn Header="Would join?" Binding="{Binding JoinLabel}" Width="100"/>
-                            <DataGridTextColumn Header="WP" Binding="{Binding WpText}" Width="140"/>
-                            <DataGridTextColumn Header="Rule" Binding="{Binding TransferRule}" Width="200"/>
-                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
-                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
-                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
-                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
-                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="160"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
-
             <TabItem Header="Squad">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
@@ -288,9 +254,45 @@
                     </DataGrid>
                 </DockPanel>
             </TabItem>
+            <TabItem x:Name="ShortlistTab" Header="★ Shortlist" Foreground="#F5C542" FontWeight="SemiBold" ToolTip="Your shortlist (Ctrl+6)">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="   All shortlisted players, whatever the Players filters. Right-click: compare / remove · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="ShortlistGrid" MouseDoubleClick="ShortlistGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
+                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="170"/>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
+                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
+                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="160"/>
+                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Join %" Binding="{Binding Join, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Would join?" Binding="{Binding JoinLabel}" Width="100"/>
+                            <DataGridTextColumn Header="WP" Binding="{Binding WpText}" Width="140"/>
+                            <DataGridTextColumn Header="Rule" Binding="{Binding TransferRule}" Width="200"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
+                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="160"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>
+
+
 
 
 
