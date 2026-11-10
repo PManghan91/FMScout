@@ -257,10 +257,30 @@
             <TabItem x:Name="ShortlistTab" Header="★ Shortlist" Foreground="#F5C542" FontWeight="SemiBold" ToolTip="Your shortlist (Ctrl+6)">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Text="   All shortlisted players, whatever the Players filters. Right-click: compare / remove · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
-                            <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Text="   Click a column to sort · right-click a player: copy name / compare / remove · right-click a header: columns · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                                <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
+                            </StackPanel>
+                            <WrapPanel Margin="0,8,0,0">
+                                <TextBlock Text="Search / query" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                                <TextBox x:Name="SlQuery" Width="260" FontFamily="Consolas" ToolTip="Name, or the Players query syntax, e.g.  age&lt;=23 ca&gt;=squad pos:ST join&gt;=50 -risky" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Position" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <ComboBox x:Name="SlPos" Width="110" SelectionChanged="SlFilter_Changed2"/>
+                                <TextBlock Text="Age" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlAgeMin" Width="36" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="–" VerticalAlignment="Center" Margin="4,0"/>
+                                <TextBox x:Name="SlAgeMax" Width="36" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Min CA" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlCaMin" Width="44" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Min PA" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlPaMin" Width="44" TextChanged="SlFilter_Changed"/>
+                                <CheckBox x:Name="SlGettable" Content="Gettable only" Margin="14,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
+                                <CheckBox x:Name="SlCanSign" Content="Hide can't sign" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
+                                <Button Content="Clear" Margin="10,0,0,0" Click="SlClear_Click"/>
+                                <TextBlock x:Name="SlError" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="IndianRed"/>
+                            </WrapPanel>
                         </StackPanel>
                     </Border>
                     <DataGrid x:Name="ShortlistGrid" MouseDoubleClick="ShortlistGrid_DoubleClick">
@@ -269,6 +289,8 @@
                             <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
                             <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
                             <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="170"/>
+                            <DataGridTextColumn Header="League" Binding="{Binding League}" Width="140"/>
+                            <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" Width="110"/>
                             <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
                             <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
                             <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="160"/>
@@ -283,6 +305,11 @@
                             <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
                             <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
                             <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="160"/>
+                            <DataGridTextColumn Header="Gain vs squad" Binding="{Binding GainOverSquad, StringFormat=+0;-0;0}"/>
+                            <DataGridTextColumn Header="Value for money" Binding="{Binding Vfm, StringFormat=F1}"/>
+                            <DataGridTextColumn Header="Bargain" Binding="{Binding BargainText}" Width="120"/>
+                            <DataGridTextColumn Header="Personality" Binding="{Binding PersonalityLabel}" Width="120"/>
+                            <DataGridTextColumn Header="Development" Binding="{Binding OutlookText}"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -291,6 +318,8 @@
         </TabControl>
     </DockPanel>
 </Window>
+
+
 
 
 

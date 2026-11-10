@@ -64,6 +64,7 @@ public partial class App : Application
         Render(w, Path.Combine(outDir, "selftest-compare.png"), 2);
         Render(w, Path.Combine(outDir, "selftest-clubs.png"), 3);
         Render(w, Path.Combine(outDir, "selftest-staff.png"), 4);
+        Render(w, Path.Combine(outDir, "selftest-shortlist.png"), 5);
         RenderMenu(w.SelfTestColumnsMenu(), Path.Combine(outDir, "selftest-menu.png"));
         File.WriteAllText(Path.Combine(outDir, "selftest.txt"), log.ToString());
     }
@@ -125,6 +126,7 @@ public partial class App : Application
         enc.Save(fs);
     }
 }
+
 
 
 

@@ -811,6 +811,42 @@ public partial class MainWindow : Window
 
     void AttachContextMenus()
     {
+        StaffGrid.PreviewMouseRightButtonDown += (s, e) =>
+        {
+            var row = ItemsControl.ContainerFromElement(StaffGrid, (DependencyObject)e.OriginalSource) as DataGridRow;
+            if (row == null) { StaffGrid.ContextMenu = null; return; }
+            if (!row.IsSelected) { StaffGrid.SelectedItems.Clear(); row.IsSelected = true; }
+            var sel = StaffGrid.SelectedItems.OfType<StaffRow>().ToList();
+            var m = new ContextMenu();
+            var mi = new MenuItem { Header = sel.Count == 1 ? $"Copy name \"{sel[0].Name}\"" : $"Copy {sel.Count} names" };
+            mi.Click += (_, _) => { CopyNames(sel.Select(x => x.Name)); StatusText.Text = $"Copied {sel.Count} name(s)."; };
+            m.Items.Add(mi);
+            StaffGrid.ContextMenu = m;
+        };
+        foreach (var g0 in new DataGrid[] { PlayerGrid, SquadGrid, ShortlistGrid, StaffGrid, ClubGrid })
+        {
+            var gg = g0;
+            gg.PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key != Key.C || !Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+                var names = gg.SelectedItems.Cast<object>().Select(o => o switch { PlayerRow p => p.Name, StaffRow s => s.Name, ClubRow c => c.Club, _ => null })
+                    .Where(n => n != null).Cast<string>().ToList();
+                if (names.Count == 0) return;
+                CopyNames(names); StatusText.Text = $"Copied {names.Count} name(s)."; e.Handled = true;
+            };
+        }
+        ClubGrid.PreviewMouseRightButtonDown += (s, e) =>
+        {
+            var row = ItemsControl.ContainerFromElement(ClubGrid, (DependencyObject)e.OriginalSource) as DataGridRow;
+            if (row == null) { ClubGrid.ContextMenu = null; return; }
+            if (!row.IsSelected) { ClubGrid.SelectedItems.Clear(); row.IsSelected = true; }
+            var sel = ClubGrid.SelectedItems.OfType<ClubRow>().ToList();
+            var m = new ContextMenu();
+            var mi = new MenuItem { Header = sel.Count == 1 ? $"Copy club name \"{sel[0].Club}\"" : $"Copy {sel.Count} club names" };
+            mi.Click += (_, _) => { CopyNames(sel.Select(x => x.Club)); StatusText.Text = $"Copied {sel.Count} club name(s)."; };
+            m.Items.Add(mi);
+            ClubGrid.ContextMenu = m;
+        };
         foreach (var grid in new[] { PlayerGrid, SquadGrid, ShortlistGrid })
         {
             var g = grid;
@@ -829,6 +865,13 @@ public partial class MainWindow : Window
     {
         var menu = new ContextMenu();
         string who = sel.Count == 1 ? "" : $" {sel.Count} players";
+        var copy = new MenuItem { Header = sel.Count == 1 ? $"Copy name \"{p.Name}\"" : $"Copy {sel.Count} names" };
+        copy.Click += (_, _) => { CopyNames(sel.Select(x => x.Name)); StatusText.Text = sel.Count == 1 ? $"Copied \"{p.Name}\"." : $"Copied {sel.Count} names."; };
+        menu.Items.Add(copy);
+        var copy2 = new MenuItem { Header = sel.Count == 1 ? "Copy name + club" : $"Copy {sel.Count} names + clubs" };
+        copy2.Click += (_, _) => { CopyNames(sel.Select(x => $"{x.Name} ({x.Club})")); StatusText.Text = $"Copied {sel.Count} name(s) with clubs."; };
+        menu.Items.Add(copy2);
+        menu.Items.Add(new Separator());
         bool allIn = sel.All(_compare.Contains);
         var cmp = new MenuItem { Header = allIn ? $"Remove{who} from comparison" : $"Add{who} to comparison" };
         cmp.Click += (_, _) =>
@@ -1016,10 +1059,49 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------ shortlist tab
     void UpdateShortlistTab()
     {
-        var list = _all.Where(p => Shortlist.Contains(p.Uid)).OrderByDescending(p => p.BestRoleScore).ToList();
+        if (SlPos.ItemsSource == null) { SlPos.ItemsSource = new[] { "(any)", "GK", "D", "DC", "DL/DR", "WB", "DM", "M", "MC", "W", "AM", "AMC", "ST" }; SlPos.SelectedIndex = 0; }
+        var all = _all.Where(p => Shortlist.Contains(p.Uid)).ToList();
+        Func<PlayerRow, bool> pred = _ => true;
+        SlError.Text = "";
+        try
+        {
+            int? I(TextBox t) => int.TryParse(t.Text.Trim(), out var v) ? v : null;
+            var pos = SlPos.SelectedItem as string;
+            var f = new FilterState
+            {
+                Query = SlQuery.Text.Trim(), AgeMin = I(SlAgeMin), AgeMax = I(SlAgeMax), CaMin = I(SlCaMin), PaMin = I(SlPaMin),
+                GettableOnly = SlGettable.IsChecked == true, HideCantSign = SlCanSign.IsChecked == true,
+                Positions = pos is null or "(any)" ? [] : pos.Split('/').ToList(),
+            };
+            pred = FilterBuilder.Build(f, _roles);
+        }
+        catch (Exception ex) when (ex is QueryError or FormatException) { SlError.Text = ex.Message; }
+        var list = all.Where(pred).OrderByDescending(p => p.BestRoleScore).ToList();
+        // keep the user's column sort (incl. Shift+click multi-column) across refreshes
+        var sorts = ShortlistGrid.Items.SortDescriptions.ToList();
+        var dirs = ShortlistGrid.Columns.ToDictionary(col => col, col => col.SortDirection);
         ShortlistGrid.ItemsSource = list;
+        foreach (var sd in sorts) ShortlistGrid.Items.SortDescriptions.Add(sd);
+        foreach (var (col, d) in dirs) col.SortDirection = d;
         ShortlistTab.Header = $"★ Shortlist ({Shortlist.Count})";
-        ShortlistTitle.Text = _all.Count == 0 ? $"Shortlist: {Shortlist.Count} players (press Load from game to see them)" : $"Shortlist: {list.Count} players";
+        ShortlistTitle.Text = _all.Count == 0 ? $"Shortlist: {Shortlist.Count} players (press Load from game to see them)"
+            : list.Count == all.Count ? $"Shortlist: {all.Count} players" : $"Shortlist: {list.Count} of {all.Count} players";
+    }
+
+    void SlFilter_Changed(object sender, TextChangedEventArgs e) => UpdateShortlistTab();
+    void SlFilter_Changed2(object sender, SelectionChangedEventArgs e) { if (SlPos.ItemsSource != null) UpdateShortlistTab(); }
+    void SlFilter_Click(object sender, RoutedEventArgs e) => UpdateShortlistTab();
+    void SlClear_Click(object sender, RoutedEventArgs e)
+    {
+        SlQuery.Text = SlAgeMin.Text = SlAgeMax.Text = SlCaMin.Text = SlPaMin.Text = "";
+        SlGettable.IsChecked = SlCanSign.IsChecked = false; SlPos.SelectedIndex = 0;
+        UpdateShortlistTab();
+    }
+
+    static void CopyNames(IEnumerable<string> names)
+    {
+        var text = string.Join(Environment.NewLine, names);
+        for (int i = 0; i < 5; i++) { try { Clipboard.SetText(text); return; } catch { Thread.Sleep(30); } } // clipboard can be briefly locked by other apps
     }
 
     void ShortlistRemove_Click(object sender, RoutedEventArgs e)
@@ -1313,6 +1395,8 @@ public partial class MainWindow : Window
         catch { }
     }
 }
+
+
 
 
 
