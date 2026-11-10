@@ -7,15 +7,42 @@
   "builds": {
     "27.0.0+2493426": {
       "module": "game_plugin.dll",
+      "origin": "built-in",
+      // Relationship-list codes (person.relations): kind 8 nation / 1 club; nation+9 = nationality; club+3/4 = favoured
+      "relationCodes": { "nationKind": 8, "clubKind": 1, "nationality": 9, "favouredClub": [3, 4] },
+      // Real players with stable facts, used by Patch Doctor after an FM update (PA/height don't change in a save)
+      "anchors": [
+        { "fullName": "Erling Braut Haaland", "pa": 195, "heightCm": 195 },
+        { "fullName": "Lamine Yamal Nasraoui Ebana", "pa": 195, "heightCm": 178 },
+        { "fullName": "Jude Victor William Bellingham", "pa": 188, "heightCm": 186 },
+        { "fullName": "Bukayo Ayoyinka Saka", "pa": 188, "heightCm": 178 },
+        { "fullName": "Jonas Kurt Urbig", "pa": 170, "heightCm": 189 }
+      ],
+      "womensNamePattern": "\\b(women|women's|womens|ladies|feminin|feminino|femenino|femenina|femení|féminin|féminine|frauen|dames|damallsvenskan|toppserien|kvinde|naisten|wsl|nwsl|liga f)\\b|\\bfem\\b|\\(w\\)",
       "steamBuildId": 26340721,
 
       "personDb": {
         "rootRva": "0x57056E0",   // static pointer -> database object
         "vectorBegin": "0x138",   // std::vector<Person*> of ALL people (players, staff, retired...)
-        "vectorEnd": "0x140"
+        "vectorEnd": "0x140",
+        // other static paths to the same master list. FM fills them at different times (0x57056E0 was empty after a restart
+        // on 10/11/2026 while 0x56F7070 had all 427k people), so the reader uses whichever is populated.
+        "alternatives": [
+          { "rootRva": "0x56F7070", "vectorBegin": "0x6E0", "vectorEnd": "0x6E8" },
+          { "rootRva": "0x56F7078", "vectorBegin": "0x4C0", "vectorEnd": "0x4C8" }
+        ]
       },
-      "gameDateRva": "0x5706018", // tentative: current in-game date (u16 day-of-year in low 9 bits, u16 year)
-      "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player
+      "gameDateRva": "0x5706018", // confirmed: current in-game date (Wed 4/2/2037 = day 35); u16 day in low 9 bits, u16 year
+      "playerVtableRva": "0x4D29758", // person pointer's first qword == module+this  => it is a player (~140k)
+      // A second player class (~2.9k, e.g. Jacob Greaves): same person fields, player block 0xF8 bytes further back.
+      "extraPlayerClasses": [ { "vtableRva": "0x4F77F38", "shift": "-0xF8" } ],
+      "humanManagerVtableRva": "0x4CC28D8", // human manager(s): e.g. "Paul Manghan"; club via person.contract -> team -> club
+      // contract.squadStatus values. Confirmed against UI: 2, 3, 17. Others inferred from who has them.
+      "squadStatusNames": {
+        "1": "Star Player", "2": "Important Player", "3": "Regular Starter", "4": "Squad Player", "5": "Fringe Player?",
+        "7": "Backup?", "10": "Hot Prospect?", "11": "Breakthrough Prospect?", "13": "Youngster?", "15": "First-Choice GK?",
+        "17": "Domestic Cup Goalkeeper", "20": "Backup GK?"
+      },
 
       "person": {
         "uid": "0xC",              // u32 FM unique ID (Haaland = 29179241)
@@ -26,10 +53,31 @@
         "personality": "0x70",     // 8 bytes, 1-20 (hidden personality attributes; order unconfirmed)
         "birthCity": "0x80",       // City* (city +0x18 = name)
         "dateOfBirth": "0x88",     // u16 day-of-year (1-based), u16 year
-        "club": "0x108"            // Club* (null for free agents)
+        "club": "0x108",           // PREVIOUS club (staff: Reiziger->Hannover, Wright->Man City, Vukcevic->Buducnost per their history). Current club = contract chain.
+        "contract": "0xA8",        // Contract* for the current club (null if none)
+        "relations": "0x78",       // -> object with std::vector of 16-byte entries {target*, ?, u8 kind (+0xA), u8 relation (+0xB), u8 strength (+0xC)}
+                                   // kind 8 = nation, 1 = club, 3 = person. nation+relation 9 = other nationality (Musiala: England, Nigeria);
+                                   // club+relation 3/4 = favoured club (Haaland: Leeds, Viking); 0x48 = former club; nation 0x46 = played in
+        "flags": "0x19",           // flag byte
+        "femaleBit": 4             // bit set = female (100% of women's-league players, 0.2% elsewhere)
       },
       "nation": { "name": "0x18", "code": "0x28", "nationality": "0x30" },
-      "club": { "name": "0xC0", "shortName": "0xC8" },
+      "club": { "name": "0xC0", "shortName": "0xC8", "reputation": "0x168" }, // reputation u16 0-10000 (Real Madrid 9750, Bristol Rovers 5750)
+      "contract": {
+        "team": "0x10",          // Team* (first team / B team etc.)
+        "weeklyWage": "0x20",    // u32, GBP per week (inside UI wage range for all 3 test players)
+        "startDate": "0x44",     // date (day field has flags in upper bits)
+        "expiryDate": "0x48",    // date, confirmed (30/6/2038, 30/6/2037, 30/6/2040)
+        "squadStatus": "0x54",   // u8, see squadStatusNames
+        "job": "0x26"            // u8 job code, see jobNames
+      },
+      "team": { "club": "0x30", "competition": "0x50", "competitionName": "0x48", "competitionNation": "0x60" },
+
+      // human manager's in-game shortlist: contract -> team -> +teamData -> +lists (vector of list objects) -> list +listPlayers (vector of entry*, entry +0 = player)
+      "shortlist": { "teamData": "0x80", "lists": "0x230", "listPlayers": "0x80", "entryPlayer": "0x0" },
+
+      // offers: proposed contracts are contract objects (+0x8 = player); the offer record pointing at one has status +0x2E (2 = agreed), +0x30 >= 1, kind +0x31 (8 = renewal, 6/7 = free)
+      "offers": { "contractPerson": "0x8", "status": "0x2E", "agreedStatus": 2, "agreed": "0x30", "kind": "0x31", "renewalKinds": [8], "freeKinds": [6, 7] },
 
       "player": {
         "blockStart": "-0x288",
@@ -37,27 +85,50 @@
         "attributes": "-0x129",      // 54 bytes, 1-100 scale (UI shows value/5)
         "height": "-0x5A",           // u8 cm
         "currentAbility": "-0x24",   // s16 1-200
-        "potentialAbility": "-0x22"  // s16 1-200 (negative = range, none seen in this save)
+        "potentialAbility": "-0x22", // s16 1-200 (negative = range, none seen in this save)
+        "commonName": "-0x198",
+        "careerStats": "-0x178",     // pointer to career stats object (verified on 5 players vs UI career totals)
+        "careerGoals": "0x6",        // u16 in that object
+        "careerApps": "0xE",         // u16 in that object
+        "homeReputation": "-0x2A",   // u16 0-10000 (likely: Bristol Rovers players ~5000)
+        "currentReputation": "-0x28",// u16 0-10000
+        "worldReputation": "-0x26",  // u16 0-10000 (Haaland 9852, Bristol Rovers players ~2500)      // FMString* known-as name, null if none (Yamal -> "Lamine Yamal")
+        "value": "-0x54"             // u32 GBP. Inside UI range for Yamal, Urbig, Ortiz; Verbruggen 25.2M vs UI 19.5-25M; Haaland 300M (Not for Sale)
       },
 
-      // Tentative order, inferred from known players (Verbruggen=GK, Haaland=ST, Yamal/Saka=AMR, Musiala/Wirtz=AMC).
-      "positionNames": [ "GK", "DL", "DC", "DR", "pos04?", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL?", "WBR?" ],
+      // Order from known players: GK Verbruggen; DC Cubarsi/Huijsen/Yoro (idx3); DL+WBL Andueza; DR+WBR Javier Ortiz; DM/MC/AMC Bellingham; AMR Yamal; ST Haaland.
+      // idx1 is 1 for everyone -> Sweeper (legacy). Confirmed by Javier Ortiz screenshot (DR 20, WBR 15, DL 7).
+      "positionNames": [ "GK", "SW", "DL", "DC", "DR", "DM", "ML", "MC", "MR", "AML", "AMC", "AMR", "ST", "WBL", "WBR" ],
 
-      // 54 attributes. Names with '?' are statistical guesses; "aNN" are unidentified. See README.
+      // 54 attributes, raw 1-100 (UI = round(raw/5)). Order = FM's classic internal order.
+      // Confirmed against UI for Haaland, Yamal, Verbruggen: all 36 outfield + Handling, CommandOfArea, OneOnOnes, Eccentricity, RushingOut, Punching.
+      // All 13 GK attributes confirmed with Urbig screenshot. Only the 5 hidden attributes (41,44,47,48,49) are named from the order.
       "attributeNames": [
-        "a00 Crossing?", "a01 Dribbling?", "a02 Finishing?", "a03 Heading?", "a04 LongShots?", "a05 Marking?",
-        "a06 OffTheBall?", "a07 Passing?", "a08 Penalties?", "a09 Tackling?", "a10 Vision?",
-        "a11 GK", "a12 GK", "a13 GK", "a14 GK", "a15 GK", "a16 GK",
-        "a17 Decisions?", "a18 Bravery?", "a19 GK", "a20 Positioning?", "a21 GK",
-        "a22 Composure?", "a23 Technique?", "a24 LeftFoot", "a25 RightFoot",
-        "a26 Flair?", "a27 Corners?", "a28 a28", "a29 a29", "a30 LongThrows?",
-        "a31 GK(tendency)", "a32 GK(tendency)", "a33 GK(tendency)",
-        "a34 Acceleration?", "a35 FreeKicks?", "a36 Strength?", "a37 Stamina?", "a38 Pace?", "a39 JumpingReach?",
-        "a40 a40", "a41 Hidden", "a42 WorkRate?", "a43 Aggression?", "a44 a44(age-linked)", "a45 Hidden",
-        "a46 Agility?", "a47 Hidden?", "a48 Hidden", "a49 a49(age-linked)", "a50 a50", "a51 Hidden?",
-        "a52 Anticipation?", "a53 Concentration?"
+        "Crossing", "Dribbling", "Finishing", "Heading", "LongShots", "Marking", "OffTheBall", "Passing", "Penalties", "Tackling", "Vision",
+        "Handling", "AerialReach", "CommandOfArea", "Communication", "Kicking", "Throwing",
+        "Anticipation", "Decisions", "OneOnOnes", "Positioning", "Reflexes", "FirstTouch", "Technique", "LeftFoot", "RightFoot",
+        "Flair", "Corners", "Teamwork", "WorkRate", "LongThrows", "Eccentricity", "RushingOut", "Punching",
+        "Acceleration", "FreeKicks", "Strength", "Stamina", "Pace", "JumpingReach", "Leadership", "Dirtiness", "Balance", "Bravery",
+        "Consistency", "Aggression", "Agility", "ImportantMatches", "InjuryProneness", "Versatility", "NaturalFitness", "Determination",
+        "Composure", "Concentration"
       ],
-      "personalityNames": [ "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7" ]
+      // Order solved from 12 UI personality labels (players + staff): see docs/ground-truth-brr.md
+      "personalityNames": [ "Adaptability", "Ambition", "Loyalty", "Pressure", "Professionalism", "Sportsmanship", "Temperament", "Controversy" ],
+      "staffVtableRva": "0x4D8DE78",
+      // contract.job codes seen in the UI: 1 player, 2 Coach, 12 Physio, 14 Scout, 16 Manager, 20 Assistant Manager
+      "jobNames": { "1": "Player", "2": "Coach", "12": "Physio", "14": "Scout", "16": "Manager", "20": "Assistant Manager" }
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+

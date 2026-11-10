@@ -1,0 +1,345 @@
+<Window x:Class="FM27Scout.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FM27 Scout" Height="900" Width="1600" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="13">
+    <DockPanel>
+        <!-- Top bar -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                    <TextBlock Text="FM27 Scout" FontSize="18" FontWeight="Bold" Margin="0,0,14,0" VerticalAlignment="Center"/>
+                    <Button x:Name="LoadButton" Content="Load from game" Style="{StaticResource AccentButton}" Click="Load_Click"
+                            ToolTip="Read everything from the running FM27 (read-only). Press again to refresh. Shortcut: F5 / Ctrl+L"/>
+                    <TextBlock Text="My club" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                    <ComboBox x:Name="MyClubCombo" Width="190" SelectionChanged="MyClub_Changed" IsTextSearchEnabled="True"
+                              ToolTip="The club you manage (auto-detected from the game). Drives the Join estimate."/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <ComboBox x:Name="SavedCombo" Width="180" Margin="4,0" SelectionChanged="Saved_Selected" ToolTip="Saved searches"/>
+                    <Button Content="Save search" Click="SaveSearch_Click"/>
+                    <Button Content="Delete" Click="DeleteSearch_Click"/>
+                    <Button x:Name="ColumnsButton" Content="Columns ▾" Click="Columns_Click"/>
+                    <Button Content="Roles…" Click="Roles_Click" ToolTip="Open roles.json (role weights). Reload with Load from game."/>
+                </StackPanel>
+                <Grid Margin="12,0">
+                    <TextBox x:Name="QueryBox" FontFamily="Consolas" FontSize="13" KeyDown="Query_KeyDown"
+                             ToolTip="Examples:  age&lt;=21 pa&gt;=150 pos:ST   league:&quot;Premier League&quot; value&lt;=30m   finishing&gt;=15 poa&gt;=70   pot.bpcb&gt;=80   free gk"/>
+                    <TextBlock x:Name="QueryHint" IsHitTestVisible="False" Margin="8,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontFamily="Consolas"
+                               Text="Query: age&lt;=21 pa&gt;=150 pos:ST league:&quot;Premier League&quot; value&lt;=30m poa&gt;=70   (Enter to apply)"/>
+                </Grid>
+            </DockPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="10,4">
+            <DockPanel>
+                <TextBlock x:Name="CountText" DockPanel.Dock="Right" Foreground="{StaticResource Muted}"/>
+                <TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" Text="Not loaded. Start FM27 with your save, then press Load from game (F5).   Shortcuts: Ctrl+F query · Ctrl+1-6 tabs · Esc clears the query"/>
+            </DockPanel>
+        </Border>
+
+        <TabControl x:Name="Tabs" Background="{StaticResource Bg}" BorderThickness="0" Padding="0">
+            <TabItem Header="Players">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="SidebarCol" Width="290"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition x:Name="ProfileCol" Width="0"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Filter sidebar -->
+                    <Border Grid.Column="0" Background="{StaticResource Bg}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="8">
+                                <Button Content="Apply filters" Style="{StaticResource AccentButton}" Click="Apply_Click"/>
+                                <Button Content="Reset" Click="Reset_Click"/>
+                            </StackPanel>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                                <StackPanel x:Name="Sidebar">
+                                    <Expander Header="Quick filters" IsExpanded="True">
+                                        <WrapPanel>
+                                            <CheckBox x:Name="FShortlist" Content="★ Shortlist only" Width="128"/>
+                                            <CheckBox x:Name="FGettable" Content="Gettable for us" Width="128" ToolTip="Join ≥ 50 (Possible or Likely) for your club"/>
+                                            <CheckBox x:Name="FNewgens" Content="Newgens only" Width="128"/>
+                                            <CheckBox x:Name="FBargains" Content="Bargains only" Width="128"/>
+                                            <CheckBox x:Name="FHideWp" Content="Hide WP unlikely" Width="128"/>
+                                            <CheckBox x:Name="FHideCantSign" Content="Hide can't sign" Width="128" ToolTip="e.g. foreign under-18s for a UK club"/>
+                            <CheckBox x:Name="FHideTrn" Content="Exclude transfer arranged" Width="200" ToolTip="Hide players who already have an agreed move to another club (FM: Transfer arranged). Query: -trn"/>
+                                        </WrapPanel>
+                                    </Expander>
+                                    <Expander Header="Basics" IsExpanded="True">
+                                        <StackPanel>
+                                            <Label Content="Name"/><TextBox x:Name="FName"/>
+                                            <Label Content="Age (min – max)"/>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <TextBox x:Name="FAgeMin"/><TextBox x:Name="FAgeMax" Grid.Column="2"/></Grid>
+                                            <Label Content="Current ability (min – max)"/>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <TextBox x:Name="FCaMin"/><TextBox x:Name="FCaMax" Grid.Column="2"/></Grid>
+                                            <Label Content="Potential ability (min – max)"/>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <TextBox x:Name="FPaMin"/><TextBox x:Name="FPaMax" Grid.Column="2"/></Grid>
+                                            <Label Content="Nationality"/><TextBox x:Name="FNation"/>
+                                            <Label Content="Min height (cm)"/><TextBox x:Name="FHeight"/>
+                                        </StackPanel>
+                                    </Expander>
+
+                                    <Expander Header="Position &amp; role" IsExpanded="True">
+                                        <StackPanel>
+                                            <Label Content="Plays at (any of)"/>
+                                            <WrapPanel x:Name="PositionChecks"/>
+                                            <Label Content="Minimum position rating"/>
+                                            <ComboBox x:Name="FPosMin" SelectedIndex="1">
+                                                <ComboBoxItem Content="20 – Natural"/>
+                                                <ComboBoxItem Content="15 – Accomplished"/>
+                                                <ComboBoxItem Content="10 – Competent"/>
+                                                <ComboBoxItem Content="5 – Unconvincing"/>
+                                            </ComboBox>
+                                            <Label Content="Role (adds Role / Pot. role columns)"/>
+                                            <ComboBox x:Name="FRole" DisplayMemberPath="Display" SelectionChanged="Role_Changed"/>
+                                            <Label Content="Min role score / min potential score (0-100)"/>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <TextBox x:Name="FRoleMin"/><TextBox x:Name="FRolePotMin" Grid.Column="2"/></Grid>
+                                        </StackPanel>
+                                    </Expander>
+
+                                    <Expander Header="Club &amp; contract">
+                                        <StackPanel>
+                                            <Label Content="Club"/><TextBox x:Name="FClub"/>
+                                            <Label Content="League / competition"/><TextBox x:Name="FLeague"/>
+                                            <Label Content="Max value (e.g. 25m, 500k)"/><TextBox x:Name="FValueMax"/>
+                                            <Label Content="Max wage per week (e.g. 80k)"/><TextBox x:Name="FWageMax"/>
+                                            <Label Content="Contract expires by (year)"/><TextBox x:Name="FContract"/>
+                                            <CheckBox x:Name="FFree" Content="Free agents only" Margin="0,8,0,0"/>
+
+                                        </StackPanel>
+                                    </Expander>
+
+                                    <Expander Header="Attributes (minimum, 1-20)">
+                                        <StackPanel x:Name="AttrFilterPanel"/>
+                                    </Expander>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+
+                    <DataGrid x:Name="PlayerGrid" Grid.Column="1" Sorting="Grid_Sorting" SelectionChanged="Grid_SelectionChanged" MouseDoubleClick="PlayerGrid_DoubleClick"
+                              FrozenColumnCount="1" CanUserSortColumns="True"/>
+
+                    <!-- Profile -->
+                    <Border x:Name="ProfilePanel" Grid.Column="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed">
+                        <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="14,8,8,0">
+                            <Button DockPanel.Dock="Right" Content="✕" Padding="8,2" Click="CloseProfile_Click" ToolTip="Close (Esc)"/>
+                            <Button DockPanel.Dock="Right" Content="Full profile ↗" Padding="8,2" Margin="0,0,6,0" Click="FullProfile_Click" ToolTip="Open the wide FM-style profile card"/>
+                            <TextBlock Text="Player profile" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="Profile" Margin="14">
+                                <TextBlock Text="Double-click a player" Foreground="{StaticResource Muted}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Squad">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Club" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="SquadClubCombo" Width="220" SelectionChanged="SquadClub_Changed" IsTextSearchEnabled="True"/>
+                            <RadioButton x:Name="SquadModeList" Content="List" IsChecked="True" GroupName="SquadMode" Margin="14,0,0,0" VerticalAlignment="Center" Click="SquadMode_Click"/>
+                            <RadioButton x:Name="SquadModeTactic" Content="Tactic view" GroupName="SquadMode" Margin="10,0,0,0" VerticalAlignment="Center" Click="SquadMode_Click" FontWeight="SemiBold"/>
+                            <CheckBox x:Name="SquadAllTeams" Content="Include reserves &amp; youth" Margin="14,0,0,0" VerticalAlignment="Center" Click="SquadAll_Click"/>
+                            <TextBlock x:Name="SquadTitle" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <TextBlock Text="   ·   right-click: compare / find upgrade / shortlist · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="TacticHost" DockPanel.Dock="Bottom" Visibility="Collapsed"/>
+                    <DataGrid x:Name="SquadGrid" SelectionChanged="SquadGrid_SelectionChanged" MouseDoubleClick="SquadGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="Team" Binding="{Binding TeamName}" Width="150"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
+                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
+                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="170"/>
+                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding SquadStatusName}" Width="130"/>
+                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
+                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="150"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Compare">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Comparison" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="   (right-click any player › Add to comparison; best value per row is highlighted)" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            <Button Content="Clear" Margin="16,0,0,0" Click="ClearCompare_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <Grid x:Name="CompareGrid" Margin="12"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Clubs">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Filter" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
+                            <TextBox x:Name="ClubFilter" Width="260" TextChanged="ClubFilter_Changed"/>
+                            <TextBlock Text="  Double-click a club to see its players." VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="ClubGrid" MouseDoubleClick="ClubGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="240"/>
+                            <DataGridTextColumn Header="League" Binding="{Binding League}" Width="200"/>
+                            <DataGridTextColumn Header="Players" Binding="{Binding Players}"/>
+                            <DataGridTextColumn Header="Avg CA" Binding="{Binding AvgCa, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Best CA" Binding="{Binding BestCa}"/>
+                            <DataGridTextColumn Header="Avg PA" Binding="{Binding AvgPa, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Avg age" Binding="{Binding AvgAge, StringFormat=F1}"/>
+                            <DataGridTextColumn Header="Squad value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                            <DataGridTextColumn Header="Weekly wages" Binding="{Binding WageText}" SortMemberPath="Wages"/>
+                            <DataGridTextColumn Header="Best player" Binding="{Binding BestPlayer}" Width="200"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Staff">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Search" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                                <TextBox x:Name="StaffFilter" Width="240" TextChanged="StaffFilter_Changed" ToolTip="Name, club, nation or job"/>
+                                <TextBlock Text="Job" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <ComboBox x:Name="StaffJob" Width="180" SelectionChanged="StaffJob_Changed"/>
+                                <TextBlock Text="Personality" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <ComboBox x:Name="StaffPersonality" Width="170" SelectionChanged="StaffJob_Changed"/>
+                                <CheckBox x:Name="StaffEmployed" Content="Employed by a club" IsChecked="True" Margin="14,0,0,0" VerticalAlignment="Center" Click="StaffEmployed_Click"/>
+                                <TextBlock x:Name="StaffCount" Margin="14,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                       Text="Staff coaching / knowledge attributes are not decoded yet: FM27 shows them as word bands that don't map to any single stored value (tested on 8 staff). Shown here: everything that is read reliably."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="StaffGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
+                            <DataGridTextColumn Header="Job" Binding="{Binding Job}" Width="140"/>
+                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="200"/>
+                            <DataGridTextColumn Header="League / team" Binding="{Binding Competition}" Width="190"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" Width="120"/>
+                            <DataGridTextColumn Header="Personality" Binding="{Binding Personality}" Width="140"/>
+                            <DataGridTextColumn Header="Professionalism" Binding="{Binding Professionalism}"/>
+                            <DataGridTextColumn Header="Ambition" Binding="{Binding Ambition}"/>
+                            <DataGridTextColumn Header="Loyalty" Binding="{Binding Loyalty}"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding Expiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="Previous club" Binding="{Binding PreviousClub}" Width="180"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+            <TabItem x:Name="ShortlistTab" Header="★ Shortlist" Foreground="#F5C542" FontWeight="SemiBold" ToolTip="Your shortlist (Ctrl+6)">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="10,8" Background="{StaticResource Bg}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ShortlistTitle" Text="Shortlist" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Text="   Click a column to sort · right-click a player: copy name / compare / remove · right-click a header: columns · double-click: profile" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+                                <Button Content="Remove selected" Margin="16,0,0,0" Click="ShortlistRemove_Click"/>
+                            </StackPanel>
+                            <WrapPanel Margin="0,8,0,0">
+                                <TextBlock Text="Search / query" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,6,0"/>
+                                <TextBox x:Name="SlQuery" Width="260" FontFamily="Consolas" ToolTip="Name, or the Players query syntax, e.g.  age&lt;=23 ca&gt;=squad pos:ST join&gt;=50 -risky" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Position" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <ComboBox x:Name="SlPos" Width="110" SelectionChanged="SlFilter_Changed2"/>
+                                <TextBlock Text="Age" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlAgeMin" Width="36" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="–" VerticalAlignment="Center" Margin="4,0"/>
+                                <TextBox x:Name="SlAgeMax" Width="36" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Min CA" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlCaMin" Width="44" TextChanged="SlFilter_Changed"/>
+                                <TextBlock Text="Min PA" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="14,0,6,0"/>
+                                <TextBox x:Name="SlPaMin" Width="44" TextChanged="SlFilter_Changed"/>
+                                <CheckBox x:Name="SlGettable" Content="Gettable only" Margin="14,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
+                                <CheckBox x:Name="SlCanSign" Content="Hide can't sign" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click"/>
+                                <CheckBox x:Name="SlNoTrn" Content="Exclude transfer arranged" IsChecked="True" Margin="10,0,0,0" VerticalAlignment="Center" Click="SlFilter_Click" ToolTip="Hide players who already have an agreed move elsewhere"/>
+                                <Button Content="Clear" Margin="10,0,0,0" Click="SlClear_Click"/>
+                                <Button x:Name="SlReplaceFm" Content="⇄ Replace with FM shortlist" Margin="16,0,0,0" Click="SlReplaceFm_Click" FontWeight="SemiBold" ToolTip="Make this shortlist exactly match the shortlist you have in FM right now (read from the running game). The old list is backed up."/>
+                                <Button x:Name="SlImportFm" Content="⇩ Add FM shortlist" Margin="6,0,0,0" Click="SlImportFm_Click" ToolTip="Add the players on your in-game shortlist to this shortlist. Nothing is removed."/>
+                                <Button Content="⇪ Export for FM" Margin="6,0,0,0" FontWeight="SemiBold" Click="SlExportFm_Click" ToolTip="Save this shortlist as an FM27 shortlist file in Documents\Sports Interactive\Football Manager 27\shortlists, then load it in FM (Shortlist › Load)."/>
+                                <Button Content="Copy names missing in FM" Margin="6,0,0,0" Click="SlCopyMissing_Click" ToolTip="Copy the names of shortlisted players who are not on your in-game shortlist yet, to search and add them in FM"/>
+                                <TextBlock x:Name="SlError" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="IndianRed"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid x:Name="ShortlistGrid" MouseDoubleClick="ShortlistGrid_DoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="190"/>
+                            <DataGridTextColumn Header="In FM" Binding="{Binding InFmText}" SortMemberPath="InFm" Width="54"/>
+                            <DataGridTextColumn Header="Age" Binding="{Binding Age}"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding PositionsText}" Width="120"/>
+                            <DataGridTextColumn Header="Club" Binding="{Binding Club}" Width="170"/>
+                            <DataGridTextColumn Header="League" Binding="{Binding League}" Width="140"/>
+                            <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" Width="110"/>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CA}"/>
+                            <DataGridTextColumn Header="PA" Binding="{Binding PA}"/>
+                            <DataGridTextColumn Header="Best role" Binding="{Binding BestRole}" Width="160"/>
+                            <DataGridTextColumn Header="Score" Binding="{Binding BestRoleScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Pot." Binding="{Binding BestPotentialScore, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Join %" Binding="{Binding Join, StringFormat=F0}"/>
+                            <DataGridTextColumn Header="Would join?" Binding="{Binding JoinLabel}" Width="100"/>
+                            <DataGridTextColumn Header="WP" Binding="{Binding WpText}" Width="140"/>
+                            <DataGridTextColumn Header="Transfer arranged" Binding="{Binding ArrangedText}" SortMemberPath="ArrangedSort" Width="190"/>
+                            <DataGridTextColumn Header="Rule" Binding="{Binding TransferRule}" Width="200"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" SortMemberPath="Value"/>
+                            <DataGridTextColumn Header="Wage p/w" Binding="{Binding WageText}" SortMemberPath="Wage"/>
+                            <DataGridTextColumn Header="Expires" Binding="{Binding ContractExpiry, StringFormat=dd/MM/yyyy}"/>
+                            <DataGridTextColumn Header="ΔCA season" Binding="{Binding DeltaCaSeason}"/>
+                            <DataGridTextColumn Header="Risks" Binding="{Binding RiskText}" Width="160"/>
+                            <DataGridTextColumn Header="Gain vs squad" Binding="{Binding GainOverSquad, StringFormat=+0;-0;0}"/>
+                            <DataGridTextColumn Header="Value for money" Binding="{Binding Vfm, StringFormat=F1}"/>
+                            <DataGridTextColumn Header="Bargain" Binding="{Binding BargainText}" Width="120"/>
+                            <DataGridTextColumn Header="Personality" Binding="{Binding PersonalityLabel}" Width="120"/>
+                            <DataGridTextColumn Header="Development" Binding="{Binding OutlookText}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>
+
+
+
+
+
+
+
+
+
+
+
+
+
