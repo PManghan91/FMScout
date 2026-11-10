@@ -14,7 +14,7 @@ public sealed class RoleDef
 
     internal (int idx, double w)[] Weights = [];
     internal int[] PosIdx = [];
-    public string Display => Code == "-" ? Name : $"{Name} ({Code})";
+    public string Display => Code == "-" ? Name : $"{Name} ({Code})  ·  {string.Join("/", Positions)}";
     public override string ToString() => Display;
 }
 
@@ -57,6 +57,12 @@ public sealed class RoleSet
             if (missing.Length > 0) { set.Roles = [.. set.Roles, .. missing]; set.MergedBuiltIns = missing.Length; }
         }
         catch { }
+        // keep roles of the same position together in pickers (new built-ins are appended at the end otherwise)
+        static int Group(RoleDef r) => (r.Positions.FirstOrDefault() ?? "") switch
+        {
+            "GK" => 0, "SW" or "DC" => 1, "DL" or "DR" => 2, "WBL" or "WBR" => 3, "DM" => 4, "MC" => 5, "ML" or "MR" => 6, "AMC" => 7, "AML" or "AMR" => 8, "ST" => 9, _ => 10,
+        };
+        set.Roles = set.Roles.Select((r, i) => (r, i)).OrderBy(t => Group(t.r)).ThenBy(t => t.i).Select(t => t.r).ToArray();
         set.SourcePath = path;
         set.Compile();
         return set;
