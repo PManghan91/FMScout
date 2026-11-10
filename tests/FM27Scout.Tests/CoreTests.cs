@@ -123,5 +123,17 @@ public class QueryTests
     [InlineData("500k", 500_000)]
     [InlineData("£1,200", 1200)]
     public void MoneyParsing(string s, long expected) => Assert.Equal(expected, FilterBuilder.Money(s));
-}
 
+    [Fact]
+    public void FmfShortlistMatchesFmLayout()
+    {
+        uint[] uids = [2002223305, 2002137441, 2002176981];
+        var bytes = FM27Scout.Model.FmfShortlist.Build("test", uids);
+        Assert.Equal("afe.", System.Text.Encoding.ASCII.GetString(bytes, 2, 4));
+        long len = BitConverter.ToInt64(bytes, 9);
+        Assert.Equal("fmf.", System.Text.Encoding.ASCII.GetString(bytes, (int)(9 + len) + 2, 4));
+        var dir = Path.Combine(Path.GetTempPath(), "fm27scout-test");
+        var path = FM27Scout.Model.FmfShortlist.Write("test", uids, dir);
+        Assert.True(File.Exists(path));
+    }
+}

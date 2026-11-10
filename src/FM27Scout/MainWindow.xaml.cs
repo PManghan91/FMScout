@@ -1147,6 +1147,25 @@ public partial class MainWindow : Window
     void SlFilter_Changed(object sender, TextChangedEventArgs e) => UpdateShortlistTab();
     void SlFilter_Changed2(object sender, SelectionChangedEventArgs e) { if (SlPos.ItemsSource != null) UpdateShortlistTab(); }
     void SlFilter_Click(object sender, RoutedEventArgs e) => UpdateShortlistTab();
+    void SlExportFm_Click(object sender, RoutedEventArgs e)
+    {
+        if (Shortlist.Count == 0) { MessageBox.Show(this, "Your FM27 Scout shortlist is empty.", "FM27 Scout"); return; }
+        var name = Prompt.Ask(this, "Export for FM", "Shortlist name (as it will appear in FM):", "FM27 Scout shortlist");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+        var byUid = _all.ToDictionary(p => p.Uid);
+        var uids = Shortlist.All.OrderByDescending(u => byUid.TryGetValue(u, out var p) ? p.BestRoleScore : 0).ToList();
+        var path = Path.Combine(FmfShortlist.Folder, FmfShortlist.SafeFileName(name) + ".fmf");
+        if (File.Exists(path) && MessageBox.Show(this, $"{Path.GetFileName(path)} already exists in FM's shortlists folder. Replace it?", "FM27 Scout", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        try
+        {
+            path = FmfShortlist.Write(name, uids);
+            StatusText.Text = $"Saved {uids.Count} players to {path}.";
+            MessageBox.Show(this, $"Saved \"{name}\" ({uids.Count} players) to FM's shortlists folder:\n{path}\n\nIn FM27: open your Shortlist, use its menu to load a shortlist, and pick \"{name}\".", "FM27 Scout");
+        }
+        catch (Exception ex) { ErrorDialog.Show(this, "FM27 Scout", "Couldn't save the shortlist file.\n\n" + ex.Message, ex.ToString()); }
+    }
+
     async void SlReplaceFm_Click(object sender, RoutedEventArgs e)
     {
         SlReplaceFm.IsEnabled = false;

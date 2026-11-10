@@ -90,11 +90,72 @@ if (args.Length > 0 && args[0] == "statsfind")
     }
     return;
 }
+if (args.Length > 0 && args[0] == "readrva")
+{
+    using var m5 = ProcessMemory.Attach("fm");
+    var mb = m5.Module("game_plugin.dll")!.Value.Base;
+    foreach (var a in args.Skip(1)) { ulong r = Convert.ToUInt64(a, 16); Console.WriteLine($"{r:X}: dword {m5.Read<uint>(mb + r):X8} qword {m5.Read<ulong>(mb + r):X16} bytes {Convert.ToHexString(m5.ReadBytes(mb + r, 32) ?? [])}"); }
+    return;
+}
+if (args.Length > 0 && args[0] == "findaes")
+{
+    using var m4 = ProcessMemory.Attach("fm");
+    byte[] sbox = AesSbox();
+    uint Sub(uint w) => (uint)(sbox[w & 0xFF] | sbox[(w >> 8) & 0xFF] << 8 | sbox[(w >> 16) & 0xFF] << 16 | sbox[w >> 24] << 24);
+    uint Rot(uint w) => (w >> 8) | (w << 24);
+    byte[] rcon = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36];
+    bool Check(ReadOnlySpan<byte> b, int nk, int words)
+    {
+        Span<uint> w = stackalloc uint[words];
+        for (int i = 0; i < words; i++) w[i] = BitConverter.ToUInt32(b.Slice(i * 4, 4));
+        if (w[0] == 0 && w[1] == 0) return false;
+        for (int i = nk; i < words; i++)
+        {
+            uint t = w[i - 1];
+            if (i % nk == 0) t = Sub(Rot(t)) ^ rcon[i / nk - 1];
+            else if (nk > 6 && i % nk == 4) t = Sub(t);
+            if ((w[i - nk] ^ t) != w[i]) return false;
+        }
+        return true;
+    }
+    var found = new HashSet<string>();
+    long scanned = 0;
+    foreach (var r in m4.Regions(privateOnly: false))
+    {
+        if (r.Size > 512UL << 20) continue;
+        var buf = m4.ReadBytes(r.Base, (int)r.Size); if (buf == null) continue;
+        scanned += buf.Length;
+        for (int o = 0; o + 240 <= buf.Length; o += 4)
+        {
+            var s = buf.AsSpan(o);
+            if (Check(s, 4, 44) || Check(s, 8, 60) || Check(s, 6, 52))
+            {
+                int nk = Check(s, 4, 44) ? 4 : Check(s, 8, 60) ? 8 : 6;
+                var key = Convert.ToHexString(buf, o, nk * 4);
+                if (found.Add(key)) Console.WriteLine($"AES-{nk * 32} key at {r.Base + (ulong)o:X}: {key}");
+            }
+        }
+    }
+    Console.WriteLine($"scanned {scanned >> 20} MB, {found.Count} keys");
+    return;
+}
+static byte[] AesSbox()
+{
+    var s = new byte[256]; byte p = 1, q = 1;
+    do
+    {
+        p = (byte)(p ^ (p << 1) ^ ((p & 0x80) != 0 ? 0x1B : 0));
+        q ^= (byte)(q << 1); q ^= (byte)(q << 2); q ^= (byte)(q << 4); if ((q & 0x80) != 0) q ^= 0x09;
+        byte x = (byte)(q ^ (byte)((q << 1) | (q >> 7)) ^ (byte)((q << 2) | (q >> 6)) ^ (byte)((q << 3) | (q >> 5)) ^ (byte)((q << 4) | (q >> 4)));
+        s[p] = (byte)(x ^ 0x63);
+    } while (p != 1);
+    s[0] = 0x63; return s;
+}
 if (args.Length > 0 && args[0] == "fmshortlist")
 {
     using var g = FmGame.Attach(Report.FindLayout());
     var byUid = g.PlayerPointers().Select(g.ReadPlayer).GroupBy(x => x.Uid).ToDictionary(x => x.Key, x => x.First());
-    foreach (var (club, uids) in g.HumanShortlists()) Console.WriteLine($"{club}: {uids.Count}: {string.Join(", ", uids.Select(u => byUid.TryGetValue(u, out var pl) ? pl.Name : u.ToString()))}");
+    foreach (var (club, uids) in g.HumanShortlists()) Console.WriteLine($"{club}: {uids.Count}: {string.Join(", ", uids.Select(u => (byUid.TryGetValue(u, out var pl) ? pl.Name : "?") + " " + u))}");
     return;
 }
 if (args.Length > 0 && args[0] == "clublists")
@@ -1001,6 +1062,9 @@ switch (cmd)
         Console.WriteLine("usage: find <text> [max] | refs <hex> [back] | dump <hex> [len] | modules");
         break;
 }
+
+
+
 
 
 
